@@ -3,11 +3,11 @@
 A production-grade, zero-trust security proxy middleware engine for the Model Context Protocol (MCP).
 
 ## 🌐 Deployed Systems Framework
-* **Live Operations Dashboard Interface:** https://github.io
+* **Live Operations Dashboard Interface:** https://janani0734.github.io/mcp-guardrail/
 * **Telemetry Server Entry Point Layer:** `src/server.js` (Port 8080 Management Route Bridge)
 
 ## 📈 Market Landscape & Core Thesis
-With the monumental 970x explosion in Model Context Protocol adoption—scaling from 1 lakh downloads/month in late 2024 to 9.6 crores/month in early 2026—enterprises are rapidly exposing data clusters (Supabase databases, CRMs, Notion nodes) directly to autonomous AI agents (Claude Code, Cursor, ChatGPT extensions). However, giving models write access scales the risk of runaway batch mutations or indirect prompt injections exponentially. 
+With the monumental 970x explosion in Model Context Protocol adoption—scaling from 1 lakh downloads/month in late 2024 to 9.6 crores/month in early 2026, enterprises are rapidly exposing data clusters (Supabase databases, CRMs, Notion nodes) directly to autonomous AI agents (Claude Code, Cursor, ChatGPT extensions). However, giving models write access scales the risk of runaway batch mutations or indirect prompt injections exponentially. 
 
 `mcp-guardrail` solves this by introducing a strict, zero-trust firewall middleware layer that isolates high-risk actions out-of-band and guarantees an absolute Human-in-the-Loop approval constraint.
 
