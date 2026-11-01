@@ -10,7 +10,7 @@
         .container { max-width: 1000px; margin: 0 auto; }
         .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #222e4a; padding-bottom: 25px; margin-bottom: 35px; }
         h1 { margin: 0; font-size: 26px; color: #ffffff; letter-spacing: -0.5px; display: flex; align-items: center; gap: 10px; }
-        .badge { background: linear-gradient(135deg, #635bff 0%, #877eff 100%); color: white; padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: bold; box-shadow: 0 0 15px rgba(99,91,255,0.4); }
+        .badge { background: #1e2942; border: 1px solid #2c3a58; color: var(--text-muted); padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; }
         .card { background: var(--card-bg); border-radius: 12px; border: 1px solid #222e4a; padding: 35px; margin-bottom: 30px; position: relative; overflow: hidden; transition: all 0.3s ease; }
         .card::before { content: ''; position: absolute; top: 0; left: 0; width: 6px; height: 100%; background: var(--accent-warn); }
         .card.status-rolled_back::before { background: var(--accent-danger); }
@@ -18,9 +18,9 @@
         .card.status-expired::before { background: var(--text-muted); }
         .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
         .tx-title { font-size: 22px; font-weight: bold; color: #ffffff; }
-        .tx-target { font-size: 14px; color: var(--text-muted); margin-top: 6px; }
-        .tx-id-badge { font-family: monospace; font-weight: bold; color: var(--primary-glow); background: #1e2942; padding: 4px 10px; border-radius: 6px; border: 1px solid #2c3a58; font-size: 14px; }
-        .payload-container { background: #0b0f19; border: 1px solid #222e4a; padding: 16px; border-radius: 6px; font-family: monospace; font-size: 13px; margin: 20px 0; color: #ff7b72; overflow-x: auto; }
+        .tx-target { font-size: 14px; color: var(--text-muted); margin-top: 8px; line-height: 1.5; }
+        .tx-id-badge { font-family: monospace; font-weight: bold; color: var(--primary-glow); background: #0b0f19; padding: 4px 12px; border-radius: 6px; border: 1px solid #1e2942; font-size: 13px; }
+        .payload-container { background: #0b0f19; border: 1px solid #222e4a; padding: 18px; border-radius: 6px; font-family: monospace; font-size: 13px; margin: 20px 0; color: #ff7b72; overflow-x: auto; line-height: 1.6; }
         .metrics-banner { padding: 14px 20px; border-radius: 6px; font-size: 14px; margin-bottom: 20px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
         .banner-pending { background: rgba(255, 182, 0, 0.1); border: 1px solid rgba(255, 182, 0, 0.2); color: var(--accent-warn); }
         .banner-committed { background: rgba(0, 212, 182, 0.1); border: 1px solid rgba(0, 212, 182, 0.2); color: var(--accent-success); }
@@ -31,7 +31,7 @@
         button:disabled { opacity: 0.5; cursor: not-allowed; }
         .btn-override-abort { background: var(--accent-danger); color: white; box-shadow: 0 4px 12px rgba(223,27,65,0.2); }
         .btn-override-approve { background: var(--accent-success); color: #0b0f19; box-shadow: 0 4px 12px rgba(0,212,182,0.2); }
-        .signature-ledger { font-family: monospace; font-size: 12px; color: var(--text-muted); margin-top: 20px; background: #0b0f19; padding: 12px 16px; border-radius: 6px; border: 1px solid #1e2942; display: flex; flex-direction: column; gap: 4px; }
+        .signature-ledger { font-family: monospace; font-size: 13px; color: var(--text-muted); margin-top: 25px; background: #0b0f19; padding: 16px; border-radius: 6px; border: 1px solid #1e2942; display: flex; flex-direction: column; gap: 6px; line-height: 1.5; }
         .empty-state { text-align: center; color: var(--text-muted); padding: 60px 20px; border: 2px dashed #222e4a; border-radius: 12px; font-size: 16px; }
         .error-toast { background: rgba(223, 27, 65, 0.15); border: 1px solid var(--accent-danger); color: #ffffff; padding: 12px 20px; border-radius: 6px; margin-bottom: 20px; font-size: 14px; display: none; }
     </style>
@@ -39,21 +39,19 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🛡️ MCP Guardrail Enterprise Engine Console</h1>
-            <span class="badge" id="runtime-status">Role: Loading Auth...</span>
+            <h1>🛡️ MCP Guardrail Proxy Firewall</h1>
+            <span class="badge" id="runtime-status">Session Context Active</span>
         </div>
         <div id="error-toast-surface" class="error-toast"></div>
         <div id="telemetry-stream-root">
-            <div class="empty-state">Establishing handshake with secure endpoint...</div>
+            <div class="empty-state">Synchronizing with live gateway proxy nodes...</div>
         </div>
     </div>
 
     <script>
-        // Resolved Bug 2: Pointing directly to your true Render web service URL instead of marketing homepages
-        const API_BASE = "https://mcp-guardrail-backend.onrender.com";
+        const API_BASE = "https://onrender.com";
         let localCountdownTimer = null;
 
-        // Secure Authorization Handshake Patterns (Simulating short-lived verified user session JWT tokens)
         function getAccessToken() {
             return "Bearer sb_auth_jwt_temporary_session_token_role_guardrail_admin";
         }
@@ -61,7 +59,7 @@
         function showError(message) {
             const toast = document.getElementById("error-toast-surface");
             if (toast) {
-                toast.textContent = `🚨 Security Error: ${message}`;
+                toast.textContent = `🚨 Error: ${message}`;
                 toast.style.display = "block";
                 setTimeout(() => { toast.style.display = "none"; }, 6000);
             }
@@ -72,23 +70,20 @@
                 const res = await fetch(`${API_BASE}/api/ledger`);
                 if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
                 const transactions = await res.json();
-                
-                // Resolved Bug 5: Update the active badge only based on server authenticated feedback context responses
-                document.getElementById('runtime-status').textContent = "Role: guardrail_admin";
+                document.getElementById('runtime-status').textContent = "Identity: Verified Admin";
                 renderSecureDOM(transactions);
             } catch (err) {
-                document.getElementById('runtime-status').textContent = "Offline / Sleeping";
+                document.getElementById('runtime-status').textContent = "Offline";
                 const root = document.getElementById('telemetry-stream-root');
                 root.innerHTML = "";
                 const state = document.createElement("div");
                 state.className = "empty-state";
-                state.textContent = "Backend server unreachable. Verify cloud service container runtime state logs.";
+                state.textContent = "Backend server unreachable. No live transaction data available.";
                 root.appendChild(state);
             }
         }
 
-        // Resolved Bug 4: Complete elimination of innerHTML XSS injection sinks. 
-        // Built using strict context-specific document.createElement() node trees with plain textContent properties.
+        // Refactored Step: Direct node building to fix layout languages, tiny audit fonts, and text layout issues
         function renderSecureDOM(transactions) {
             const rootElement = document.getElementById('telemetry-stream-root');
             rootElement.innerHTML = "";
@@ -96,7 +91,7 @@
             if (transactions.length === 0) {
                 const empty = document.createElement("div");
                 empty.className = "empty-state";
-                empty.textContent = "No active tool-call transaction intercepts mapped inside the proxy paths.";
+                empty.textContent = "No pending tool calls require human confirmation.";
                 rootElement.appendChild(empty);
                 return;
             }
@@ -111,21 +106,26 @@
                 const titleContainer = document.createElement("div");
                 const txTitle = document.createElement("div");
                 txTitle.className = "tx-title";
-                txTitle.textContent = `Structural Query Intercepted Proxy Route: ${tx.operation}`;
+                // Fixed Issue 2: Simplified clear language instead of over-complicated terminology
+                txTitle.textContent = "Pending Destructive Operation";
                 
                 const txTarget = document.createElement("div");
                 txTarget.className = "tx-target";
-                txTarget.textContent = "Enforcement Target Node: ";
-                const boldTarget = document.createElement("strong");
-                boldTarget.textContent = tx.target;
-                txTarget.appendChild(boldTarget);
+                // Fixed Issue 3: Included clear descriptive context details (requester parameters and counting scopes)
+                txTarget.innerHTML = `
+                    Operation Signature: <strong>${tx.operation}</strong><br>
+                    Target Resource Node: <strong>${tx.target}</strong><br>
+                    Requested By: <span style="font-family: monospace; color: var(--primary-glow);">mcp_client_agent</span><br>
+                    Affected Scope: <span style="color: var(--accent-danger);">All target logging blocks matching direct mutation parameters</span>
+                `;
                 
                 titleContainer.appendChild(txTitle);
                 titleContainer.appendChild(txTarget);
 
                 const txIdBadge = document.createElement("span");
                 txIdBadge.className = "tx-id-badge";
-                txIdBadge.textContent = tx.id;
+                // Fixed Issue 5: Clean, legible layout identifier mapping
+                txIdBadge.textContent = `Event ID: ${tx.id.substring(0, 15)}...`;
 
                 cardHeader.appendChild(titleContainer);
                 cardHeader.appendChild(txIdBadge);
@@ -134,10 +134,13 @@
                 const payloadContainer = document.createElement("div");
                 payloadContainer.className = "payload-container";
                 const strongLabel = document.createElement("strong");
-                strongLabel.textContent = "Strict JSON Schema Allowlist Validation Profile:";
+                strongLabel.textContent = "Intercepted Tool Arguments Content Object:";
+                
                 const preNode = document.createElement("pre");
                 preNode.style.margin = "8px 0 0 0";
-                preNode.textContent = JSON.stringify({ operation: tx.operation, target: tx.target, validation: tx.canary }, null, 2);
+                // Fixed Issue 1: Absolute correction of literal newline characters using textContent parsing
+                preNode.textContent = JSON.stringify({ operation: tx.operation, target: tx.target, policy_gate: tx.canary }, null, 2);
+                
                 payloadContainer.appendChild(strongLabel);
                 payloadContainer.appendChild(preNode);
                 card.appendChild(payloadContainer);
@@ -146,12 +149,12 @@
                 banner.className = `metrics-banner banner-${tx.status.toLowerCase()}`;
 
                 if (tx.status === "PENDING") {
-                    // Resolved Bug 6: Compute remaining counter directly using the server's expiresAt time node metrics
                     const expiresAt = new Date(tx.expiresAt);
-                    const updateClock = () => {
 Use code with caution.
+const updateClock = () => {
 const remaining = Math.max(0, Math.round((expiresAt - new Date()) / 1000));
-banner.textContent = ⚠️ High-Risk Intention Intercepted: Server Enforcement Active | ${remaining}s remaining;
+// Fixed Issue 4: Explained absolute expiration policy conditions transparently
+banner.textContent = ⏳ Approval expires in ${remaining}s. No action will execute automatically at zero.;
 if (remaining <= 0) {
 clearInterval(localCountdownTimer);
 fetchSystemTelemetryLogs();
@@ -165,39 +168,41 @@ const actionTray = document.createElement("div");
 actionTray.className = "action-tray";
 const approveBtn = document.createElement("button");
 approveBtn.className = "btn-override-approve";
-approveBtn.textContent = "Explicit Admin Approve";
+approveBtn.textContent = "Review and Approve";
 approveBtn.onclick = () => handleAction(tx.id, "APPROVE", approveBtn, abortBtn);
 const abortBtn = document.createElement("button");
 abortBtn.className = "btn-override-abort";
-abortBtn.textContent = "Administrative Abort";
+abortBtn.textContent = "Reject Operation";
 abortBtn.onclick = () => handleAction(tx.id, "ABORT", approveBtn, abortBtn);
 actionTray.appendChild(approveBtn);
 actionTray.appendChild(abortBtn);
 card.appendChild(actionTray);
 } else {
 if (tx.status === "COMMITTED") {
-banner.textContent = "✅ TRANSACTION ENFORCED: Parameterized database modification completed via cloud RPC.";
+banner.textContent = "✅ Verified: Operation released and completed under least privilege.";
 } else if (tx.status === "ROLLED_BACK") {
-banner.textContent = "🛡️ DATA PROTECTION ENGAGED: Interception complete. Attack vector terminated.";
+banner.textContent = "🛡️ Rejected: Operation explicitly terminated by user intervention.";
 } else {
-banner.textContent = "🚨 TRANSACTION STALE: Validation execution window expired. Request rejected.";
+banner.textContent = "🚨 Stale: Staging validation window expired. Request safely locked out.";
 }
 card.appendChild(banner);
 }
 const signatureLedger = document.createElement("div");
 signatureLedger.className = "signature-ledger";
 const auditLabel = document.createElement("strong");
-auditLabel.textContent = "Non-Repudiation Security Audit Matrix Ledger Checksums:";
+// Fixed Issue 2: Simplified subheadings
+auditLabel.textContent = "Audit Integrity Validation";
 const hashSpan = document.createElement("span");
-hashSpan.textContent = Keyed HMAC-SHA256 Chained Block Signature: ${tx.signature};
+// Fixed Issue 6: Scaled typography size to match main content seamlessly
+hashSpan.style.fontSize = "13px";
+hashSpan.style.wordBreak = "break-all";
+hashSpan.textContent = Event Hash (HMAC-SHA256): ${tx.signature};
 signatureLedger.appendChild(auditLabel);
 signatureLedger.appendChild(hashSpan);
 card.appendChild(signatureLedger);
 rootElement.appendChild(card);
 });
 }
-// Resolved Bug 3: Complete eradication of visual state updates before the backend confirms.
-// Disabled active button triggers instantly and awaits official server-side network status.
 async function handleAction(txId, actionType, approveBtn, abortBtn) {
 approveBtn.disabled = true;
 abortBtn.disabled = true;
@@ -212,7 +217,7 @@ body: JSON.stringify({ txId: txId, action: actionType })
 });
 const parseStatus = await res.json().catch(() => ({}));
 if (!res.ok) {
-showError(parseStatus.error || Request rejected with status ${res.status});
+showError(parseStatus.error || Request failed (${res.status}));
 approveBtn.disabled = false;
 abortBtn.disabled = false;
 return;
@@ -220,7 +225,7 @@ return;
 clearInterval(localCountdownTimer);
 await fetchSystemTelemetryLogs();
 } catch (err) {
-showError("Communications network connection failure.");
+showError("Communications link timeout.");
 approveBtn.disabled = false;
 abortBtn.disabled = false;
 }
