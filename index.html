@@ -27,6 +27,8 @@
         button { border: none; padding: 14px 28px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; transition: all 0.2s ease; }
         .btn-override-abort { background: var(--accent-danger); color: white; box-shadow: 0 4px 12px rgba(223,27,65,0.2); }
         .btn-override-abort:hover { background: #c51435; transform: translateY(-1px); }
+        .btn-override-approve { background: var(--accent-success); color: #0b0f19; box-shadow: 0 4px 12px rgba(0,212,182,0.2); }
+        .btn-override-approve:hover { background: #00bfa4; transform: translateY(-1px); }
         .signature-ledger { font-family: monospace; font-size: 12px; color: var(--text-muted); margin-top: 20px; background: #0b0f19; padding: 12px 16px; border-radius: 6px; border: 1px solid #1e2942; display: flex; flex-direction: column; gap: 4px; }
         .empty-state { text-align: center; color: var(--text-muted); padding: 60px 20px; border: 2px dashed #222e4a; border-radius: 12px; font-size: 16px; }
     </style>
@@ -38,136 +40,123 @@
             <span class="badge" id="runtime-status">System Operational</span>
         </div>
         <div id="telemetry-stream-root">
-            <div class="empty-state">Connecting to Render cloud backend instance stream...</div>
+            <div class="empty-state">Synchronizing with Hardened API Gateway Core...</div>
         </div>
     </div>
 
-        <script>
-        // Connected to your running Render Live Cloud Server
+    <script>
         const localApiEndpoint = "https://onrender.com";
         const overrideApiEndpoint = "https://onrender.com";
         
         let countdownTimerReference = null;
-        let globalCountdownSeconds = 30;
-
-        // Hardcoded fallback data to guarantee the dashboard populates instantly even if the server is sleeping
-        const fallbackData = [{
-            id: "tx_yseguin",
-            operation: "WIPE_LOGS",
-            target: "user_database_logs",
-            canary: "VERIFIED",
-            signature: "8f4e2c9a1b3d5e7f6a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f",
-            status: "PENDING"
-        }];
+        let serverTargetExpirationTime = null;
 
         async function fetchSystemTelemetryLogs() {
             try {
-                // Attempt to fetch from the live Render cloud engine with a strict 4-second cutoff
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 4000);
-                
-                const res = await fetch(localApiEndpoint, { signal: controller.signal });
-                clearTimeout(timeoutId);
+                const res = await fetch(localApiEndpoint);
                 const transactions = await res.json();
-                renderDashboardCards(transactions);
-            } catch (err) {
-                console.log("📡 Cloud container sleeping. Deploying local fail-safe monitoring parameters.");
-                renderDashboardCards(fallbackData);
-            }
-        }
-
-        function renderDashboardCards(transactions) {
-            const rootElement = document.getElementById('telemetry-stream-root');
-            let htmlBuffer = "";
-
-            transactions.forEach(tx => {
-                let bannerLayout = "";
-                let customActionButtons = "";
-
-                if (tx.status === "PENDING") {
-                    bannerLayout = `<div class="metrics-banner" id="countdown-banner-container">
-                        <span>⚠️ High-Risk Intention Intercepted: Staging Clock Queue Active</span>
-                        <span id="countdown-clock-digits" style="font-weight:bold; font-variant-numeric: tabular-nums;">${globalCountdownSeconds}s remaining</span>
-                    </div>`;
-                    customActionButtons = `<div class="action-tray" id="action-buttons-tray">
-                        <button class="btn-override-abort" onclick="triggerManualAbort('${tx.id}')">Trigger Manual Administrative Override (Abort)</button>
-                    </div>`;
-                } else if (tx.status === "COMMITTED") {
-                    bannerLayout = `<div class="metrics-banner">✅ TRANSACTION AUTHENTICATED: Mutation payload successfully committed to target infrastructure.</div>`;
-                } else if (tx.status === "ROLLED_BACK") {
-                    bannerLayout = `<div class="metrics-banner">🛡️ DATA PROTECTION ENGAGED: Action terminated by human response. System clean.</div>`;
+                const rootElement = document.getElementById('telemetry-stream-root');
+                
+                if (transactions.length === 0) {
+                    rootElement.innerHTML = `<div class="empty-state">No transaction logs captured in the system intercept parameters.</div>`;
+                    return;
                 }
 
-                htmlBuffer += `
-                    <div class="card status-${tx.status.toLowerCase()}" id="main-tx-card">
-                        <div class="card-header">
-                            <div>
-                                <div class="tx-title">Structural Query Mutation Blocked: ${tx.operation}</div>
-                                <div class="tx-target">Target Storage Target Node: <strong>${tx.target}</strong></div>
+                let htmlBuffer = "";
+                transactions.forEach(tx => {
+                    let bannerLayout = "";
+                    let customActionButtons = "";
+
+                    if (tx.status === "PENDING") {
+                        serverTargetExpirationTime = new Date(tx.expiresAt);
+                        const initialRemaining = Math.max(0, Math.round((serverTargetExpirationTime - new Date()) / 1000));
+                        
+                        bannerLayout = `<div class="metrics-banner" id="countdown-banner-container">
+                            <span>⚠️ High-Risk Intention Intercepted: Server-Side Enforcement Point Active</span>
+                            <span id="countdown-clock-digits" style="font-weight:bold; font-variant-numeric: tabular-nums;">${initialRemaining}s remaining</span>
+                        </div>`;
+                        customActionButtons = `<div class="action-tray" id="action-buttons-tray">
+                            <button class="btn-override-approve" onclick="sendActionToServer('${tx.id}', 'APPROVE')">Explicit Admin Approve</button>
+                            <button class="btn-override-abort" onclick="sendActionToServer('${tx.id}', 'ABORT')">Administrative Abort</button>
+                        </div>`;
+                    } else if (tx.status === "COMMITTED") {
+                        bannerLayout = `<div class="metrics-banner">✅ TRANSACTION ENFORCED: Parameterized database modification completed under least privilege.</div>`;
+                    } else if (tx.status === "ROLLED_BACK") {
+                        bannerLayout = `<div class="metrics-banner">🛡️ DATA PROTECTION ENGAGED: Interception complete. Attack vector terminated.</div>`;
+                    }
+
+                    htmlBuffer += `
+                        <div class="card status-${tx.status.toLowerCase()}" id="main-tx-card">
+                            <div class="card-header">
+                                <div>
+                                    <div class="tx-title">Structural Query Mutation Intercepted: ${tx.operation}</div>
+                                    <div class="tx-target">Enforcement Target Node: <strong>${tx.target}</strong></div>
+                                </div>
+                                <span class="tx-id-badge" style="font-size: 11px;">${tx.id}</span>
                             </div>
-                            <span class="tx-id-badge">${tx.id}</span>
+                            <div class="payload-container">
+                                <strong>Strict JSON Schema Allowlist Validation Profile:</strong>
+                                <pre style="margin: 8px 0 0 0;">{\n  "operation": "${tx.operation}",\n  "target": "${tx.target}",\n  "validation": "${tx.canary}"\n}</pre>
+                            </div>
+                            ${bannerLayout}
+                            ${customActionButtons}
+                            <div class="signature-ledger">
+                                <strong>Non-Repudiation Security Audit Matrix Ledger Checksums:</strong>
+                                <span>Hash-Chained Block Signature (SHA-256): <span style="color: var(--accent-success); font-size:11px; word-break: break-all;">${tx.signature}</span></span>
+                            </div>
                         </div>
-                        <div class="payload-container">
-                            <strong>Intercepted Arguments Content Schema Object:</strong>
-                            <pre style="margin: 8px 0 0 0;">{\n  "operation": "${tx.operation}",\n  "target": "${tx.target}",\n  "canary_token": "[${tx.canary}]"\n}</pre>
-                        </div>
-                        ${bannerLayout}
-                        ${customActionButtons}
-                        <div class="signature-ledger">
-                            <strong>Non-Repudiation Security Audit Matrix Ledger Checksums:</strong>
-                            <span>SHA-256 Sign: <span style="color: var(--accent-success);">${tx.signature}</span></span>
-                        </div>
-                    </div>
-                `;
-            });
+                    `;
+                });
 
-            rootElement.innerHTML = htmlBuffer;
+                rootElement.innerHTML = htmlBuffer;
 
-            if (transactions.some(t => t.status === "PENDING") && !countdownTimerReference) {
-                startStagingCountdown();
+                if (transactions.some(t => t.status === "PENDING") && !countdownTimerReference) {
+                    startStagingCountdown();
+                }
+            } catch (err) {
+                document.getElementById('telemetry-stream-root').innerHTML = `<div class="empty-state" style="color: var(--accent-danger);">Connection failure. Verify the Render backend service instance is active.</div>`;
             }
         }
 
         function startStagingCountdown() {
             countdownTimerReference = setInterval(() => {
-                globalCountdownSeconds--;
+                if (!serverTargetExpirationTime) return;
+                
+                // Server time is the single source of truth for the countdown calculation
+                const remainingSeconds = Math.max(0, Math.round((serverTargetExpirationTime - new Date()) / 1000));
                 const digitsBox = document.getElementById('countdown-clock-digits');
+                
                 if (digitsBox) {
-                    digitsBox.innerText = `${globalCountdownSeconds}s remaining`;
+                    digitsBox.innerText = `${remainingSeconds}s remaining`;
                 }
-                if (globalCountdownSeconds <= 0) {
+                
+                if (remainingSeconds <= 0) {
                     clearInterval(countdownTimerReference);
-                    executeAutoCommit();
+                    countdownTimerReference = null;
+                    fetchSystemTelemetryLogs();
                 }
             }, 1000);
         }
 
-        function triggerManualAbort(txId) {
-            clearInterval(countdownTimerReference);
-            const mainCard = document.getElementById('main-tx-card');
-            const bannerContainer = document.getElementById('countdown-banner-container');
-            const buttonsTray = document.getElementById('action-buttons-tray');
-            
-            if(mainCard) mainCard.className = "card status-rolled_back";
-            if(bannerContainer) bannerContainer.innerHTML = `<span>🛡️ DATA PROTECTION ENGAGED: Action terminated by human response. System clean.</span>`;
-            if(buttonsTray) buttonsTray.innerHTML = `<span style="color: var(--accent-danger); font-weight: bold; font-size: 14px;">✗ Operation Killed by Human-in-the-Loop Override</span>`;
-        }
-
-        function executeAutoCommit() {
-            const mainCard = document.getElementById('main-tx-card');
-            const bannerContainer = document.getElementById('countdown-banner-container');
-            const buttonsTray = document.getElementById('action-buttons-tray');
-            
-            if(mainCard) mainCard.className = "card status-committed";
-            if(bannerContainer) bannerContainer.innerHTML = `<span>✅ TRANSACTION AUTHENTICATED: Mutation payload successfully committed to target infrastructure.</span>`;
-            if(buttonsTray) buttonsTray.innerHTML = `<span style="color: var(--accent-success); font-weight: bold; font-size: 14px;">✓ Action Authenticated by Staging Manager Release</span>`;
-        }
-
-        // Initialize active tracking loop metrics
-        fetchSystemTelemetryLogs();
-    </script>
-</body>
-</html>
-
-
-    
+        async function sendActionToServer(txId, targetAction) {
+Use code with caution.
+try {
+clearInterval(countdownTimerReference);
+countdownTimerReference = null;
+const response = await fetch(overrideApiEndpoint, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({ txId: txId, action: targetAction })
+});
+const parseStatus = await response.json();
+if (parseStatus.success) {
+fetchSystemTelemetryLogs();
+} else {
+alert(Action processing error: ${parseStatus.error});
+}
+} catch (err) {
+alert("Communications network parsing failure.");
+}
+}
+fetchSystemTelemetryLogs();
+setInterval(fetchSystemTelemetryLogs, 5000);
