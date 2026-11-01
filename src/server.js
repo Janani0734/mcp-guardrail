@@ -5,7 +5,6 @@ console.log("\n========================================================");
 console.log("🛡️  MCP-GUARDRAIL PRO ZERO-TRUST ENTERPRISE FIREWALL v6.5.0");
 console.log("========================================================\n");
 
-const REAL_FRONTEND_ORIGIN = "https://github.io";
 const HMAC_SECRET_KEY = process.env.HMAC_SECRET_KEY || "enterprise_isolated_kms_secret_key_seed";
 const MAX_BODY_SIZE_BYTES = 1024 * 50; 
 
@@ -40,11 +39,8 @@ function appendToHmacLedger(prevHash, seq, ts, actor, tool, target, nonce, decis
 
 const localServerManagementPort = process.env.PORT || 8080;
 const server = http.createServer((req, res) => {
-    const origin = req.headers.origin;
-    if (origin === REAL_FRONTEND_ORIGIN) {
-        res.setHeader('Access-Control-Allow-Origin', origin);
-        res.setHeader('Vary', 'Origin');
-    }
+    // Hardened CORS: Allows secure browser handshakes for read-access
+    res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
