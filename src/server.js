@@ -1,6 +1,7 @@
-import { StagingManager } from "./security/staging.js";
-import { AuditLedger } from "./security/ledger.js";
-import { CanaryFilter } from "./security/canary.js";
+import { StagingManager } from "./src/security/staging.js";
+import { AuditLedger } from "./src/security/ledger.js";
+import { CanaryFilter } from "./src/security/canary.js";
+
 import http from 'http';
 
 // Initialize core components with high-precision metrics
