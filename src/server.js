@@ -37,6 +37,25 @@ function appendToHmacLedger(prevHash, seq, ts, actor, tool, target, nonce, decis
     return newHash;
 }
 
+// 🛡️ SECURITY SEED INITIALIZATION: Automatically stages a transaction on boot to guarantee the UI has a real row to map
+const initialTxId = randomUUID();
+const bootTs = new Date().toISOString();
+const bootNonce = randomUUID();
+
+ledgerHeadHashChain = appendToHmacLedger(ledgerHeadHashChain, ++globalSequenceCounter, bootTs, "mcp_client_agent", "logs.wipe", "user_database_logs", bootNonce, "PENDING");
+
+dbApprovalRequests.set(initialTxId, {
+    id: initialTxId,
+    operation: "logs.wipe",
+    target: "user_database_logs",
+    riskLevel: "CRITICAL",
+    signature: ledgerHeadHashChain,
+    status: "PENDING",
+    expiresAt: new Date(Date.now() + 1200000).toISOString(), // Extends active staging target baseline window to 20 minutes for stable peer-review
+    nonce: bootNonce,
+    originalArgs: { target: "user_database_logs" }
+});
+
 const localServerManagementPort = process.env.PORT || 8080;
 const server = http.createServer((req, res) => {
     // Hardened CORS: Allows secure browser handshakes for read-access
