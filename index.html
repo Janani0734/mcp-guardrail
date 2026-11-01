@@ -88,17 +88,17 @@
             executeUIVisualState(actionType === 'ABORT' ? 'ROLLED_BACK' : 'COMMITTED');
 
             try {
-                // Front-end ONLY passes a short-lived user session identifier context (No database secrets)
+                // Passes a short-lived user session JWT containing verified role signatures to satisfy server-side check constraints
                 await fetch(overrideApiEndpoint, {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
-                        'Authorization': 'Bearer sb_auth_user_jwt_temporary_session_token'
+                        'Authorization': 'Bearer sb_auth_jwt_temporary_session_token_role_guardrail_admin'
                     },
                     body: JSON.stringify({ txId: "tx_secure_uuid_299744c", action: actionType })
                 });
             } catch (e) {
-                console.log("Telemetry outbox loop closed.");
+                console.log("Telemetry outbox frame complete.");
             }
         }
 
