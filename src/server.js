@@ -213,4 +213,4 @@ Use code with caution.
 server.listen(localServerManagementPort, () => {
 console.log(🌐 [TELEMETRY CORE] Hardened Production Hub active on port: ${localServerManagementPort});
 });
-setInterval(() => {}, 1000)
+setInterval(() => {}, 1000);
