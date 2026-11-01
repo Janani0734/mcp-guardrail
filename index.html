@@ -36,17 +36,16 @@
     <div class="container">
         <div class="header">
             <h1>🛡️ MCP Guardrail Enterprise Engine Console</h1>
-            <span class="badge" id="runtime-status">System Operational</span>
+            <span class="badge" id="runtime-status">Role: guardrail_admin</span>
         </div>
         <div id="telemetry-stream-root">
-            <!-- Hardened UI card mounts instantly on boot to bypass loading latencies -->
             <div class="card" id="main-tx-card">
                 <div class="card-header">
                     <div>
                         <div class="tx-title">Structural Query Mutation Intercepted: WIPE_LOGS</div>
                         <div class="tx-target">Enforcement Target Node: <strong>user_database_logs</strong></div>
                     </div>
-                    <span class="tx-id-badge" style="font-size: 11px;">tx_secure_uuid_71edb2d</span>
+                    <span class="tx-id-badge" style="font-size: 11px;">tx_secure_uuid_299744c</span>
                 </div>
                 <div class="payload-container">
                     <strong>Strict JSON Schema Allowlist Validation Profile:</strong>
@@ -62,7 +61,7 @@
                 </div>
                 <div class="signature-ledger">
                     <strong>Non-Repudiation Security Audit Matrix Ledger Checksums:</strong>
-                    <span>Hash-Chained Block Signature (SHA-256): <span style="color: var(--accent-success); font-size:11px; word-break: break-all;">ff474320d4185724c3f3dc027c31d72cf128ec0f2e81785173e6ead801388b86</span></span>
+                    <span>Keyed HMAC-SHA256 Chained Block Signature: <span style="color: var(--accent-success); font-size:11px; word-break: break-all;">6df4a5b8e9c2d1a3f4e58b9a0c1e2f3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f</span></span>
                 </div>
             </div>
         </div>
@@ -78,39 +77,12 @@
             if (digitsBox) {
                 digitsBox.innerText = `${globalCountdownSeconds}s remaining`;
             }
-            if (globalCountdownSeconds <= 0) {
-                clearInterval(countdownTimerReference);
-                executeUIVisualState('COMMITTED');
-            }
-        }, 1000);
-
-        async function handleAction(actionType) {
-            clearInterval(countdownTimerReference);
-            executeUIVisualState(actionType === 'ABORT' ? 'ROLLED_BACK' : 'COMMITTED');
-
-            try {
-                await fetch(overrideApiEndpoint, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ txId: "tx_secure_uuid_71edb2d", action: actionType })
-                });
-            } catch (e) {
-                console.log("Background webhook outbox telemetry synced.");
-            }
-        }
-
-        function executeUIVisualState(status) {
-            const mainCard = document.getElementById('main-tx-card');
-            const bannerContainer = document.getElementById('countdown-banner-container');
-            const buttonsTray = document.getElementById('action-buttons-tray');
-            
-            if(mainCard) mainCard.className = `card status-${status.toLowerCase()}`;
-            
-            if(bannerContainer) {
-                bannerContainer.className = "metrics-banner";
-                bannerContainer.innerHTML = status === 'ROLLED_BACK' 
-                    ? `<span>🛡️ DATA PROTECTION ENGAGED: Interception complete. Attack vector terminated.</span>`
-                    : `<span>✅ TRANSACTION ENFORCED: Parameterized database modification completed under least privilege.</span>`;
+            if (globalCountdownSeconds 🛡️ DATA PROTECTION ENGAGED: Interception complete. Attack vector terminated.</span>`;
+                } else if (status === 'COMMITTED') {
+                    bannerContainer.innerHTML = `<span>✅ TRANSACTION ENFORCED: Parameterized database modification completed via least-privilege RPC execution.</span>`;
+                } else {
+                    bannerContainer.innerHTML = `<span>🚨 TRANSACTION STALE: Staging validation window expired. Action rejected.</span>`;
+                }
             }
             if(buttonsTray) buttonsTray.style.display = "none";
         }
