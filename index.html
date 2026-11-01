@@ -36,7 +36,7 @@
     <div class="container">
         <div class="header">
             <h1>🛡️ MCP Guardrail Enterprise Engine Console</h1>
-            <span class="badge" id="runtime-status">Role: guardrail_admin</span>
+            <span class="badge" id="runtime-status">Session: Authenticated User</span>
         </div>
         <div id="telemetry-stream-root">
             <div class="card" id="main-tx-card">
@@ -77,7 +77,42 @@
             if (digitsBox) {
                 digitsBox.innerText = `${globalCountdownSeconds}s remaining`;
             }
-            if (globalCountdownSeconds 🛡️ DATA PROTECTION ENGAGED: Interception complete. Attack vector terminated.</span>`;
+            if (globalCountdownSeconds <= 0) {
+                clearInterval(countdownTimerReference);
+                executeUIVisualState('EXPIRED');
+            }
+        }, 1000);
+
+        async function handleAction(actionType) {
+            clearInterval(countdownTimerReference);
+            executeUIVisualState(actionType === 'ABORT' ? 'ROLLED_BACK' : 'COMMITTED');
+
+            try {
+                // Front-end ONLY passes a short-lived user session identifier context (No database secrets)
+                await fetch(overrideApiEndpoint, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer sb_auth_user_jwt_temporary_session_token'
+                    },
+                    body: JSON.stringify({ txId: "tx_secure_uuid_299744c", action: actionType })
+                });
+            } catch (e) {
+                console.log("Telemetry outbox loop closed.");
+            }
+        }
+
+        function executeUIVisualState(status) {
+            const mainCard = document.getElementById('main-tx-card');
+            const bannerContainer = document.getElementById('countdown-banner-container');
+            const buttonsTray = document.getElementById('action-buttons-tray');
+            
+            if(mainCard) mainCard.className = `card status-${status.toLowerCase()}`;
+            
+            if(bannerContainer) {
+                bannerContainer.className = "metrics-banner";
+                if (status === 'ROLLED_BACK') {
+                    bannerContainer.innerHTML = `<span>🛡️ DATA PROTECTION ENGAGED: Interception complete. Attack vector terminated.</span>`;
                 } else if (status === 'COMMITTED') {
                     bannerContainer.innerHTML = `<span>✅ TRANSACTION ENFORCED: Parameterized database modification completed via least-privilege RPC execution.</span>`;
                 } else {
