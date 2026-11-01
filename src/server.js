@@ -37,7 +37,7 @@ function appendToHmacLedger(prevHash, seq, ts, actor, tool, target, nonce, decis
     return newHash;
 }
 
-// 🛡️ SECURITY SEED INITIALIZATION: Automatically stages a transaction on boot to guarantee the UI has a real row to map
+// SECURITY SEED INITIALIZATION: Automatically stages an unexpired transaction on server boot
 const initialTxId = randomUUID();
 const bootTs = new Date().toISOString();
 const bootNonce = randomUUID();
@@ -51,14 +51,14 @@ dbApprovalRequests.set(initialTxId, {
     riskLevel: "CRITICAL",
     signature: ledgerHeadHashChain,
     status: "PENDING",
-    expiresAt: new Date(Date.now() + 1200000).toISOString(), // Extends active staging target baseline window to 20 minutes for stable peer-review
+    expiresAt: new Date(Date.now() + 1200000).toISOString(), // Extends window to 20 minutes for stable review
     nonce: bootNonce,
     originalArgs: { target: "user_database_logs" }
 });
 
 const localServerManagementPort = process.env.PORT || 8080;
 const server = http.createServer((req, res) => {
-    // Hardened CORS: Allows secure browser handshakes for read-access
+    // Open CORS baseline for public read-access fetches
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
