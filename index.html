@@ -30,7 +30,9 @@
         button { border: none; padding: 14px 28px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; transition: all 0.2s ease; }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
         .btn-override-abort { background: var(--accent-danger); color: white; box-shadow: 0 4px 12px rgba(223,27,65,0.2); }
+        .btn-override-abort:hover { background: #c51435; transform: translateY(-1px); }
         .btn-override-approve { background: var(--accent-success); color: #0b0f19; box-shadow: 0 4px 12px rgba(0,212,182,0.2); }
+        .btn-override-approve:hover { background: #00bfa4; transform: translateY(-1px); }
         .signature-ledger { font-family: monospace; font-size: 13px; color: var(--text-muted); margin-top: 25px; background: #0b0f19; padding: 16px; border-radius: 6px; border: 1px solid #1e2942; display: flex; flex-direction: column; gap: 6px; line-height: 1.5; }
         .empty-state { text-align: center; color: var(--text-muted); padding: 60px 20px; border: 2px dashed #222e4a; border-radius: 12px; font-size: 16px; }
         .error-toast { background: rgba(223, 27, 65, 0.15); border: 1px solid var(--accent-danger); color: #ffffff; padding: 12px 20px; border-radius: 6px; margin-bottom: 20px; font-size: 14px; display: none; }
@@ -40,11 +42,11 @@
     <div class="container">
         <div class="header">
             <h1>🛡️ MCP Guardrail Proxy Firewall</h1>
-            <span class="badge" id="runtime-status">Session Context Active</span>
+            <span class="badge" id="runtime-status">Synchronizing Engine...</span>
         </div>
         <div id="error-toast-surface" class="error-toast"></div>
         <div id="telemetry-stream-root">
-            <div class="empty-state">Synchronizing with live gateway proxy nodes...</div>
+            <div class="empty-state">Establishing connection with live Render background cloud container... (Waking up instance takes 30s)</div>
         </div>
     </div>
 
@@ -83,7 +85,6 @@
             }
         }
 
-        // Refactored Step: Direct node building to fix layout languages, tiny audit fonts, and text layout issues
         function renderSecureDOM(transactions) {
             const rootElement = document.getElementById('telemetry-stream-root');
             rootElement.innerHTML = "";
@@ -106,12 +107,10 @@
                 const titleContainer = document.createElement("div");
                 const txTitle = document.createElement("div");
                 txTitle.className = "tx-title";
-                // Fixed Issue 2: Simplified clear language instead of over-complicated terminology
                 txTitle.textContent = "Pending Destructive Operation";
                 
                 const txTarget = document.createElement("div");
                 txTarget.className = "tx-target";
-                // Fixed Issue 3: Included clear descriptive context details (requester parameters and counting scopes)
                 txTarget.innerHTML = `
                     Operation Signature: <strong>${tx.operation}</strong><br>
                     Target Resource Node: <strong>${tx.target}</strong><br>
@@ -124,7 +123,6 @@
 
                 const txIdBadge = document.createElement("span");
                 txIdBadge.className = "tx-id-badge";
-                // Fixed Issue 5: Clean, legible layout identifier mapping
                 txIdBadge.textContent = `Event ID: ${tx.id.substring(0, 15)}...`;
 
                 cardHeader.appendChild(titleContainer);
@@ -138,7 +136,6 @@
                 
                 const preNode = document.createElement("pre");
                 preNode.style.margin = "8px 0 0 0";
-                // Fixed Issue 1: Absolute correction of literal newline characters using textContent parsing
                 preNode.textContent = JSON.stringify({ operation: tx.operation, target: tx.target, policy_gate: tx.canary }, null, 2);
                 
                 payloadContainer.appendChild(strongLabel);
@@ -150,11 +147,10 @@
 
                 if (tx.status === "PENDING") {
                     const expiresAt = new Date(tx.expiresAt);
+                    const updateClock = () => {
+                        const remaining = Math.max(0, Math.round((expiresAt - new Date()) / 1000));
+                        banner.textContent = `⏳ Approval expires in ${remaining}s. No action will execute automatically at zero.`;
 Use code with caution.
-const updateClock = () => {
-const remaining = Math.max(0, Math.round((expiresAt - new Date()) / 1000));
-// Fixed Issue 4: Explained absolute expiration policy conditions transparently
-banner.textContent = ⏳ Approval expires in ${remaining}s. No action will execute automatically at zero.;
 if (remaining <= 0) {
 clearInterval(localCountdownTimer);
 fetchSystemTelemetryLogs();
@@ -190,10 +186,8 @@ card.appendChild(banner);
 const signatureLedger = document.createElement("div");
 signatureLedger.className = "signature-ledger";
 const auditLabel = document.createElement("strong");
-// Fixed Issue 2: Simplified subheadings
 auditLabel.textContent = "Audit Integrity Validation";
 const hashSpan = document.createElement("span");
-// Fixed Issue 6: Scaled typography size to match main content seamlessly
 hashSpan.style.fontSize = "13px";
 hashSpan.style.wordBreak = "break-all";
 hashSpan.textContent = Event Hash (HMAC-SHA256): ${tx.signature};
