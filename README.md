@@ -7,7 +7,7 @@ A production-grade, zero-trust security proxy firewall middleware layer designed
 * **24/7 Cloud Telemetry Backend Engine:** Deployed on Render Node Container Environment
 
 ## 📈 Market Context & core Problem Space
-With the massive 970x explosion in Model Context Protocol adoption—scaling rapidly from 1 lakh downloads/month in late 2024 to 9.6 crores/month by early 2026, enterprises are swiftly wiring autonomous AI clients (Cursor, Claude Code, custom agents) directly to core corporate database clusters. However, granting models raw, unfettered permission layers creates catastrophic vectors for indirect prompt injections or accidental recursive batch mutations. 
+With the massive 970x explosion in Model Context Protocol adoption scaling rapidly from 1 lakh downloads/month in late 2024 to 9.6 crores/month by early 2026, enterprises are swiftly wiring autonomous AI clients (Cursor, Claude Code, custom agents) directly to core corporate database clusters. However, granting models raw, unfettered permission layers creates catastrophic vectors for indirect prompt injections or accidental recursive batch mutations. 
 
 `mcp-guardrail` blocks this security loophole by introducing a high-performance proxy gateway that intercepts data mutation attempts out-of-band and enforces an absolute Human-in-the-Loop gateway before queries can resolve.
 
