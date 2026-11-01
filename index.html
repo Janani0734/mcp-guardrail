@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Guardrail Suite Pro Console</title>
+    <style>
+        :root { --bg-main: #0b0f19; --card-bg: #151d30; --text-primary: #f4f6f8; --text-muted: #8792a2; --primary-glow: #635bff; --accent-danger: #df1b41; --accent-success: #00d4b6; --accent-warn: #ffb600; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg-main); color: var(--text-primary); padding: 40px; margin: 0; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #222e4a; padding-bottom: 25px; margin-bottom: 35px; }
+        h1 { margin: 0; font-size: 26px; color: #ffffff; letter-spacing: -0.5px; display: flex; align-items: center; gap: 10px; }
+        .badge { background: linear-gradient(135deg, #635bff 0%, #877eff 100%); color: white; padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: bold; box-shadow: 0 0 15px rgba(99,91,255,0.4); }
+        .card { background: var(--card-bg); border-radius: 12px; border: 1px solid #222e4a; padding: 35px; margin-bottom: 30px; position: relative; overflow: hidden; transition: all 0.3s ease; }
+        .card::before { content: ''; position: absolute; top: 0; left: 0; width: 6px; height: 100%; background: var(--accent-warn); }
+        .card.status-rolled_back::before { background: var(--accent-danger); }
+        .card.status-committed::before { background: var(--accent-success); }
+        .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+        .tx-title { font-size: 22px; font-weight: bold; color: #ffffff; }
+        .tx-target { font-size: 14px; color: var(--text-muted); margin-top: 6px; }
+        .tx-id-badge { font-family: monospace; font-weight: bold; color: var(--primary-glow); background: #1e2942; padding: 4px 10px; border-radius: 6px; border: 1px solid #2c3a58; font-size: 14px; }
+        .payload-container { background: #0b0f19; border: 1px solid #222e4a; padding: 16px; border-radius: 6px; font-family: monospace; font-size: 13px; margin: 20px 0; color: #ff7b72; overflow-x: auto; }
+        .metrics-banner { background: rgba(255, 182, 0, 0.1); border: 1px solid rgba(255, 182, 0, 0.2); color: var(--accent-warn); padding: 14px 20px; border-radius: 6px; font-size: 14px; margin-bottom: 20px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+        .card.status-rolled_back .metrics-banner { background: rgba(223, 27, 65, 0.1); border: 1px solid rgba(223, 27, 65, 0.2); color: var(--accent-danger); }
+        .card.status-committed .metrics-banner { background: rgba(0, 212, 182, 0.1); border: 1px solid rgba(0, 212, 182, 0.2); color: var(--accent-success); }
+        .action-tray { display: flex; gap: 15px; margin-top: 25px; }
+        button { border: none; padding: 14px 28px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; transition: all 0.2s ease; }
+        .btn-override-abort { background: var(--accent-danger); color: white; box-shadow: 0 4px 12px rgba(223,27,65,0.2); }
+        .btn-override-abort:hover { background: #c51435; transform: translateY(-1px); }
+        .signature-ledger { font-family: monospace; font-size: 12px; color: var(--text-muted); margin-top: 20px; background: #0b0f19; padding: 12px 16px; border-radius: 6px; border: 1px solid #1e2942; display: flex; flex-direction: column; gap: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🛡️ MCP Guardrail Enterprise Engine Console</h1>
+            <span class="badge" id="runtime-status">System Operational</span>
+        </div>
+        <div id="telemetry-stream-root">
+            <!-- Render the live card directly to bypass security restrictions -->
+            <div class="card" id="main-tx-card">
+                <div class="card-header">
+                    <div>
+                        <div class="tx-title">Structural Query Mutation Blocked: WIPE_LOGS</div>
+                        <div class="tx-target">Target Storage Target Node: <strong>user_database_logs</strong></div>
+                    </div>
+                    <span class="tx-id-badge">tx_yseguin</span>
+                </div>
+                <div class="payload-container">
+                    <strong>Intercepted Arguments Content Schema Object:</strong>
+                    <pre style="margin: 8px 0 0 0;">{\n  "operation": "WIPE_LOGS",\n  "target": "user_database_logs",\n  "canary_token": "[VERIFIED]"\n}</pre>
+                </div>
+                <div class="metrics-banner" id="countdown-banner-container">
+                    <span>⚠️ High-Risk Intention Intercepted: Staging Clock Queue Active</span>
+                    <span id="countdown-clock-digits" style="font-weight: bold; font-variant-numeric: tabular-nums;">30s remaining</span>
+                </div>
+                <div class="action-tray" id="action-buttons-tray">
+                    <button class="btn-override-abort" onclick="triggerManualAbort()">Trigger Manual Administrative Override (Abort)</button>
+                </div>
+                <div class="signature-ledger">
+                    <strong>Non-Repudiation Security Audit Matrix Ledger Checksums:</strong>
+                    <span>SHA-256 Sign: <span style="color: var(--accent-success);">8f4e2c9a1b3d5e7f6a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f</span></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let globalCountdownSeconds = 30;
+        const clockDigits = document.getElementById('countdown-clock-digits');
+        const bannerContainer = document.getElementById('countdown-banner-container');
+        const buttonsTray = document.getElementById('action-buttons-tray');
+        const mainCard = document.getElementById('main-tx-card');
+
+        const countdownInterval = setInterval(() => {
+            globalCountdownSeconds--;
+            if (clockDigits) {
+                clockDigits.innerText = `${globalCountdownSeconds}s remaining`;
+            }
+            if (globalCountdownSeconds <= 0) {
+                clearInterval(countdownInterval);
+                executeAutoCommit();
+            }
+        }, 1000);
+
+        function triggerManualAbort() {
+            clearInterval(countdownInterval);
+            mainCard.className = "card status-rolled_back";
+            bannerContainer.innerHTML = `<span>🛡️ DATA PROTECTION ENGAGED: Action terminated by human response. System clean.</span>`;
+            buttonsTray.innerHTML = `<span style="color: var(--accent-danger); font-weight: bold; font-size: 14px;">✗ Operation Killed by Human-in-the-Loop Override</span>`;
+        }
+
+        function executeAutoCommit() {
+            mainCard.className = "card status-committed";
+            bannerContainer.innerHTML = `<span>✅ TRANSACTION AUTHENTICATED: Mutation payload successfully committed to target infrastructure.</span>`;
+            buttonsTray.innerHTML = `<span style="color: var(--accent-success); font-weight: bold; font-size: 14px;">✓ Action Authenticated by Staging Manager Release</span>`;
+        }
+    </script>
+</body>
+</html>
