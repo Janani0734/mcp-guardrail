@@ -1,39 +1,39 @@
 # MCP-Guardrail Enterprise Suite 🛡️
 
-A production-grade, zero-trust security proxy middleware engine for the Model Context Protocol (MCP).
+A production-grade, zero-trust security proxy firewall middleware layer designed for the Model Context Protocol (MCP).
 
-## 🌐 Deployed Systems Framework
-* **Live Operations Dashboard Interface:** https://janani0734.github.io/mcp-guardrail/
-* **Telemetry Server Entry Point Layer:** `src/server.js` (Port 8080 Management Route Bridge)
+## 🌐 Live Systems Framework
+* **Live Operations Control Panel UI:** https://github.io
+* **24/7 Cloud Telemetry Backend Engine:** Deployed on Render Node Container Environment
 
-## 📈 Market Landscape & Core Thesis
-With the monumental 970x explosion in Model Context Protocol adoption—scaling from 1 lakh downloads/month in late 2024 to 9.6 crores/month in early 2026, enterprises are rapidly exposing data clusters (Supabase databases, CRMs, Notion nodes) directly to autonomous AI agents (Claude Code, Cursor, ChatGPT extensions). However, giving models write access scales the risk of runaway batch mutations or indirect prompt injections exponentially. 
+## 📈 Market Context & core Problem Space
+With the massive 970x explosion in Model Context Protocol adoption—scaling rapidly from 1 lakh downloads/month in late 2024 to 9.6 crores/month by early 2026—enterprises are swiftly wiring autonomous AI clients (Cursor, Claude Code, custom agents) directly to core corporate database clusters. However, granting models raw, unfettered permission layers creates catastrophic vectors for indirect prompt injections or accidental recursive batch mutations. 
 
-`mcp-guardrail` solves this by introducing a strict, zero-trust firewall middleware layer that isolates high-risk actions out-of-band and guarantees an absolute Human-in-the-Loop approval constraint.
+`mcp-guardrail` blocks this security loophole by introducing a high-performance proxy gateway that intercepts data mutation attempts out-of-band and enforces an absolute Human-in-the-Loop gateway before queries can resolve.
 
-## 🛠️ The Three Core Security Innovations
+## 🛠️ Key Architectural Protective Layers
 
-### 1. Time-Collateralized Staging Buffer ⏱️
-* **The Logic:** `src/security/staging.js`
-* **Execution:** Automatically intercepts destructive database queries (e.g., `WIPE_LOGS`, `DROP`, `DELETE`). Instead of firing them blindly, it suspends execution in a localized memory queue for a 30-second rollback countdown buffer, providing unique transaction tokens (`tx_xxxxxx`) for out-of-band human manual overrides.
+### 1. Time-Collateralized Staging Queue Manager ⏱️
+* **Implementation Path:** `src/security/staging.js`
+* **Mechanism:** Intercepts high-risk destructive structural intents (`WIPE_LOGS`, `DELETE`, `DROP`). It shifts the context payload execution into an isolated internal memory array queue and activates a 30-second rollback clock window, exposing unique transaction signature tokens (`tx_xxxxxx`) to allow manual administrative override cancellations.
 
-### 2. Semantic Canary Honey-pots 🪤
-* **The Logic:** `src/security/canary.js`
-* **Execution:** Injects hidden boundary check tokens (`[VALID_DATA_EOF_TOKEN]`) into outbox payload lanes. If an external attacker attempts an Indirect Prompt Injection, the token structure breaks. The server detects the structural anomaly, logs a threat alert flag, and completely kills the data transaction loop before it touches live rows.
+### 2. Cryptographic Compliance Audit Trail Ledger 🔐
+* **Implementation Path:** `src/security/ledger.js`
+* **Mechanism:** Guarantees absolute, non-falsifiable historical auditing trail tracking by generating a mathematical SHA-256 signature string pairing the model's query plan directly to the specific timestamped human approval event metadata.
 
-### 3. Cryptographic Audit Ledger 🔐
-* **The Logic:** `src/security/ledger.js`
-* **Execution:** Enforces non-repudiation by mathematically generating immutable SHA-256 compliance signatures across prompt goals, arguments, and human authorization events, preventing historical trace logs from being retroactively falsified.
+### 3. Semantic Canary Honeypot Boundary Verification 🪤
+* **Implementation Path:** `src/security/canary.js`
+* **Mechanism:** Injects hidden, deterministic parameter verification elements inside query schemas to instantly flag structural alterations caused by indirect adversarial context injections before data blocks execute against production nodes.
 
-## 💻 Local Quickstart Environment Setup
+## ⚙️ Local Development Quickstart Guide
 
-1. Clone this enterprise suite folder layout directly to your computer.
-2. Initialize your secure environment runtime flags using the command line:
+1. Clone the project folder directly to your workstation layout.
+2. Inject your production database tracking keys cleanly into your current terminal memory space session:
    ```cmd
    set SUPABASE_URL=https://supabase.co
-   set SUPABASE_ANON_KEY=your-anon-public-key-token
+   set SUPABASE_ANON_KEY=your-anon-public-key-string
    ```
-3. Launch the high-performance local proxy administration engine live:
+3. Boot up the high-performance local security proxy layer loop:
    ```cmd
    node src/server.js
    ```
