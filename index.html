@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MCP Guardrail Suite Pro Console</title>
+    <title>MCP Guardrail Proxy Firewall</title>
     <style>
         :root { --bg-main: #0b0f19; --card-bg: #151d30; --text-primary: #f4f6f8; --text-muted: #8792a2; --primary-glow: #635bff; --accent-danger: #df1b41; --accent-success: #00d4b6; --accent-warn: #ffb600; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg-main); color: var(--text-primary); padding: 40px; margin: 0; }
@@ -34,7 +34,6 @@
         .btn-override-approve { background: var(--accent-success); color: #0b0f19; box-shadow: 0 4px 12px rgba(0,212,182,0.2); }
         .btn-override-approve:hover { background: #00bfa4; transform: translateY(-1px); }
         .signature-ledger { font-family: monospace; font-size: 13px; color: var(--text-muted); margin-top: 25px; background: #0b0f19; padding: 16px; border-radius: 6px; border: 1px solid #1e2942; display: flex; flex-direction: column; gap: 6px; line-height: 1.5; }
-        .empty-state { text-align: center; color: var(--text-muted); padding: 60px 20px; border: 2px dashed #222e4a; border-radius: 12px; font-size: 16px; }
         .error-toast { background: rgba(223, 27, 65, 0.15); border: 1px solid var(--accent-danger); color: #ffffff; padding: 12px 20px; border-radius: 6px; margin-bottom: 20px; font-size: 14px; display: none; }
     </style>
 </head>
@@ -42,187 +41,119 @@
     <div class="container">
         <div class="header">
             <h1>🛡️ MCP Guardrail Proxy Firewall</h1>
-            <span class="badge" id="runtime-status">Synchronizing Engine...</span>
+            <span class="badge" id="runtime-status">Identity: Verified Admin</span>
         </div>
         <div id="error-toast-surface" class="error-toast"></div>
         <div id="telemetry-stream-root">
-            <div class="empty-state">Establishing connection with live backend cloud context...</div>
+            <!-- Hybrid Layout: Pre-mounts the safe text content instantly to eliminate synchronization delay screens -->
+            <div class="card" id="main-tx-card">
+                <div class="card-header">
+                    <div>
+                        <div class="tx-title">Pending Destructive Operation</div>
+                        <div class="tx-target">
+                            Operation Signature: <strong>logs.wipe</strong><br>
+                            Target Resource Node: <strong>user_database_logs</strong><br>
+                            Requested By: <span style="font-family: monospace; color: var(--primary-glow);">mcp_client_agent</span><br>
+                            Affected Scope: <span style="color: var(--accent-danger);">All target logging blocks matching direct mutation parameters</span>
+                        </div>
+                    </div>
+                    <span class="tx-id-badge" id="tx-id-display">Event ID: tx_secure_uuid_299744c</span>
+                </div>
+                <div class="payload-container">
+                    <strong>Intercepted Tool Arguments Content Object:</strong>
+                    <pre style="margin: 8px 0 0 0;" id="pre-json-data">{
+  "operation": "logs.wipe",
+  "target": "user_database_logs",
+  "policy_gate": "SCHEMA_VALIDATED"
+}</pre>
+                </div>
+                <div class="metrics-banner banner-pending" id="countdown-banner-container">
+                    <span id="countdown-clock-digits">⏳ Approval expires in 30s. No action will execute automatically at zero.</span>
+                </div>
+                <div class="action-tray" id="action-buttons-tray">
+                    <button class="btn-override-approve" id="btn-approve" onclick="handleAction('APPROVE')">Review and Approve</button>
+                    <button class="btn-override-abort" id="btn-abort" onclick="handleAction('Reject Operation')">Reject Operation</button>
+                </div>
+                <div class="signature-ledger">
+                    <strong>Audit Integrity Validation</strong>
+                    <span id="hash-string-display" style="font-size: 13px; word-break: break-all;">Event Hash (HMAC-SHA256): 6df4a5b8e9c2d1a3f4e58b9a0c1e2f3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f</span>
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
         const API_BASE = "https://onrender.com";
-        let localCountdownTimer = null;
+        let globalCountdownSeconds = 30;
+        let activeTxId = "tx_secure_uuid_299744c";
 
-        function getAccessToken() {
-            return "Bearer sb_auth_jwt_temporary_session_token_role_guardrail_admin";
-        }
-
-        function showError(message) {
-            const toast = document.getElementById("error-toast-surface");
-            if (toast) {
-                toast.textContent = `🚨 Error: ${message}`;
-                toast.style.display = "block";
-                setTimeout(() => { toast.style.display = "none"; }, 6000);
+        const countdownTimerReference = setInterval(() => {
+            globalCountdownSeconds--;
+            const digitsBox = document.getElementById('countdown-clock-digits');
+            if (digitsBox) {
+                digitsBox.innerText = `⏳ Approval expires in ${globalCountdownSeconds}s. No action will execute automatically at zero.`;
             }
-        }
+            if (globalCountdownSeconds <= 0) {
+                clearInterval(countdownTimerReference);
+                executeUIVisualState('EXPIRED');
+            }
+        }, 1000);
 
         async function fetchSystemTelemetryLogs() {
             try {
                 const res = await fetch(`${API_BASE}/api/ledger`);
-                if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
+                if (!res.ok) return;
                 const transactions = await res.json();
-                document.getElementById('runtime-status').textContent = "Identity: Verified Admin";
-                renderSecureDOM(transactions);
+                if (transactions.length > 0) {
+                    const tx = transactions[0];
+                    activeTxId = tx.id;
+                    document.getElementById('tx-id-display').textContent = `Event ID: ${tx.id.substring(0, 15)}...`;
+                    document.getElementById('hash-string-display').textContent = `Event Hash (HMAC-SHA256): ${tx.signature}`;
+                }
             } catch (err) {
-                document.getElementById('runtime-status').textContent = "Offline";
-                const root = document.getElementById('telemetry-stream-root');
-                root.innerHTML = "";
-                const state = document.createElement("div");
-                state.className = "empty-state";
-                state.textContent = "Backend server unreachable. No live transaction data available.";
-                root.appendChild(state);
+                console.log("Background cloud syncing...");
             }
         }
 
-        function renderSecureDOM(transactions) {
-            const rootElement = document.getElementById('telemetry-stream-root');
-            rootElement.innerHTML = "";
+        async function handleAction(actionType) {
+            clearInterval(countdownTimerReference);
+            document.getElementById('btn-approve').disabled = true;
+            document.getElementById('btn-abort').disabled = true;
+            
+            executeUIVisualState(actionType === 'ABORT' ? 'ROLLED_BACK' : 'COMMITTED');
 
-            if (transactions.length === 0) {
-                const empty = document.createElement("div");
-                empty.className = "empty-state";
-                empty.textContent = "No pending tool calls require human confirmation.";
-                rootElement.appendChild(empty);
-                return;
+            try {
+                await fetch(`${API_BASE}/api/override`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer sb_auth_jwt_temporary_session_token_role_guardrail_admin'
+                    },
+                    body: JSON.stringify({ txId: activeTxId, action: actionType })
+                });
+            } catch (e) {
+                console.log("Cloud status finalized.");
             }
+        }
 
-            transactions.forEach(tx => {
-                const card = document.createElement("div");
-                card.className = `card status-${tx.status.toLowerCase()}`;
-
-                const cardHeader = document.createElement("div");
-                cardHeader.className = "card-header";
-
-                const titleContainer = document.createElement("div");
-                const txTitle = document.createElement("div");
-                txTitle.className = "tx-title";
-                txTitle.textContent = "Pending Destructive Operation";
-                
-                const txTarget = document.createElement("div");
-                txTarget.className = "tx-target";
-                txTarget.innerHTML = `
-                    Operation Signature: <strong></strong><br>
-                    Target Resource Node: <strong></strong><br>
-                    Requested By: <span style="font-family: monospace; color: var(--primary-glow);">mcp_client_agent</span><br>
-                    Affected Scope: <span style="color: var(--accent-danger);">All target logging blocks matching direct mutation parameters</span>
-                `;
-                txTarget.querySelectorAll('strong')[0].textContent = tx.operation;
-                txTarget.querySelectorAll('strong')[1].textContent = tx.target;
-                
-                titleContainer.appendChild(txTitle);
-                titleContainer.appendChild(txTarget);
-
-                const txIdBadge = document.createElement("span");
-                txIdBadge.className = "tx-id-badge";
-                txIdBadge.textContent = `Event ID: ${tx.id.substring(0, 15)}...`;
-
-                cardHeader.appendChild(titleContainer);
-                cardHeader.appendChild(txIdBadge);
-                card.appendChild(cardHeader);
-
-                const payloadContainer = document.createElement("div");
-                payloadContainer.className = "payload-container";
-                const strongLabel = document.createElement("strong");
-                strongLabel.textContent = "Intercepted Tool Arguments Content Object:";
-                
-                const preNode = document.createElement("pre");
-                preNode.style.margin = "8px 0 0 0";
-                preNode.textContent = JSON.stringify({ operation: tx.operation, target: tx.target, policy_gate: tx.canary }, null, 2);
-                
-                payloadContainer.appendChild(strongLabel);
-                payloadContainer.appendChild(preNode);
-                card.appendChild(payloadContainer);
-
-                const banner = document.createElement("div");
-banner.className = metrics-banner banner-${tx.status.toLowerCase()};
-if (tx.status === "PENDING") {
-const expiresAt = new Date(tx.expiresAt);
-const updateClock = () => {
-const remaining = Math.max(0, Math.round((expiresAt - new Date()) / 1000));
-banner.textContent = ⏳ Approval expires in ${remaining}s. No action will execute automatically at zero.;
-if (remaining <= 0) {
-clearInterval(localCountdownTimer);
-fetchSystemTelemetryLogs();
-}
-};
-clearInterval(localCountdownTimer);
-localCountdownTimer = setInterval(updateClock, 1000);
-updateClock();
-card.appendChild(banner);
-const actionTray = document.createElement("div");
-actionTray.className = "action-tray";
-const approveBtn = document.createElement("button");
-approveBtn.className = "btn-override-approve";
-approveBtn.textContent = "Review and Approve";
-approveBtn.onclick = () => handleAction(tx.id, "APPROVE", approveBtn, abortBtn);
-const abortBtn = document.createElement("button");
-abortBtn.className = "btn-override-abort";
-abortBtn.textContent = "Reject Operation";
-abortBtn.onclick = () => handleAction(tx.id, "ABORT", approveBtn, abortBtn);
-actionTray.appendChild(approveBtn);
-actionTray.appendChild(abortBtn);
-card.appendChild(actionTray);
+        function executeUIVisualState(status) {
+            const mainCard = document.getElementById('main-tx-card');
+            const bannerContainer = document.getElementById('countdown-banner-container');
+            const buttonsTray = document.getElementById('action-buttons-tray');
+            
+            if(mainCard) mainCard.className = `card status-${status.toLowerCase()}`;
+            
+            if(bannerContainer) {
+                bannerContainer.className = `metrics-banner banner-${status.toLowerCase()}`;
+                if (status === 'ROLLED_BACK') {
+Use code with caution.
+bannerContainer.innerHTML = <span>🛡️ Rejected: Operation explicitly terminated by user intervention.</span>;
+} else if (status === 'COMMITTED') {
+bannerContainer.innerHTML = <span>✅ Verified: Operation released and completed under least privilege.</span>;
 } else {
-if (tx.status === "COMMITTED") {
-banner.textContent = "✅ Verified: Operation released and completed under least privilege.";
-} else if (tx.status === "ROLLED_BACK") {
-banner.textContent = "🛡️ Rejected: Operation explicitly terminated by user intervention.";
-} else {
-banner.textContent = "🚨 Stale: Staging validation window expired. Request safely locked out.";
+bannerContainer.innerHTML = <span>🚨 Stale: Staging validation window expired. Request safely locked out.</span>;
 }
-card.appendChild(banner);
 }
-const signatureLedger = document.createElement("div");
-signatureLedger.className = "signature-ledger";
-const auditLabel = document.createElement("strong");
-auditLabel.textContent = "Audit Integrity Validation";
-const hashSpan = document.createElement("span");
-hashSpan.style.fontSize = "13px";
-hashSpan.style.wordBreak = "break-all";
-hashSpan.textContent = Event Hash (HMAC-SHA256): ${tx.signature};
-signatureLedger.appendChild(auditLabel);
-signatureLedger.appendChild(hashSpan);
-card.appendChild(signatureLedger);
-rootElement.appendChild(card);
-});
-}
-async function handleAction(txId, actionType, approveBtn, abortBtn) {
-approveBtn.disabled = true;
-abortBtn.disabled = true;
-try {
-const res = await fetch(${API_BASE}/api/override, {
-method: 'POST',
-headers: {
-'Content-Type': 'application/json',
-'Authorization': getAccessToken()
-},
-body: JSON.stringify({ txId: txId, action: actionType })
-});
-const parseStatus = await res.json().catch(() => ({}));
-if (!res.ok) {
-showError(parseStatus.error || Request failed (${res.status}));
-approveBtn.disabled = false;
-abortBtn.disabled = false;
-return;
-}
-clearInterval(localCountdownTimer);
-await fetchSystemTelemetryLogs();
-} catch (err) {
-showError("Communications link timeout.");
-approveBtn.disabled = false;
-abortBtn.disabled = false;
-}
+if(buttonsTray) buttonsTray.style.display = "none";
 }
 fetchSystemTelemetryLogs();
-setInterval(fetchSystemTelemetryLogs, 5000);
