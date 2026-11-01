@@ -5,25 +5,21 @@ console.log("\n========================================================");
 console.log("🛡️  MCP-GUARDRAIL PRO ZERO-TRUST ENTERPRISE FIREWALL v6.5.0");
 console.log("========================================================\n");
 
-// 1. HARDENED ACCESS CONTROL & PRODUCTION RATE LIMITS
-const REAL_FRONTEND_ORIGIN = "https://janani0734.github.io";
+const REAL_FRONTEND_ORIGIN = "https://github.io";
 const HMAC_SECRET_KEY = process.env.HMAC_SECRET_KEY || "enterprise_isolated_kms_secret_key_seed";
-const MAX_BODY_SIZE_BYTES = 1024 * 50; // 50KB strict buffer cap
+const MAX_BODY_SIZE_BYTES = 1024 * 50; 
 
-// Durable State Machines (Simulating multi-tenant table structures)
 const dbApprovalRequests = new Map();
 const dbHmacAuditLedger = [];
 let ledgerHeadHashChain = "0000000000000000000000000000000000000000000000000000000000000000";
 let globalSequenceCounter = 0;
 
-// NIST Zero-Trust Continuous Verification Allowlist Policies
 const SECURITY_POLICY = {
     "logs.wipe": { risk: "CRITICAL", requiresApproval: true, targetTable: "user_database_logs" },
     "metrics.archive": { risk: "MEDIUM", requiresApproval: true, targetTable: "system_metrics_node" },
     "logs.read": { risk: "LOW", requiresApproval: false, targetTable: "user_database_logs" }
 };
 
-// Keyed HMAC-SHA256 Canonical Ledger Chaining Engine
 function appendToHmacLedger(prevHash, seq, ts, actor, tool, target, nonce, decision) {
     const canonicalString = `${prevHash}||${seq}||${ts}||${actor}||${tool}||${target}||${nonce}||${decision}`;
     const newHash = createHmac('sha256', HMAC_SECRET_KEY).update(canonicalString).digest('hex');
@@ -42,10 +38,8 @@ function appendToHmacLedger(prevHash, seq, ts, actor, tool, target, nonce, decis
     return newHash;
 }
 
-// 2. CORE ROUTER IMPLEMENTING DYNAMIC MCP INTERCEPTION PROXIES
 const localServerManagementPort = process.env.PORT || 8080;
 const server = http.createServer((req, res) => {
-    // Exact Origin Verification (Removes mismatch bugs completely)
     const origin = req.headers.origin;
     if (origin === REAL_FRONTEND_ORIGIN) {
         res.setHeader('Access-Control-Allow-Origin', origin);
@@ -62,14 +56,12 @@ const server = http.createServer((req, res) => {
 
     const requestUrl = new URL(req.url, `http://${req.headers.host}`);
 
-    // Production Monitoring Gateways
     if (requestUrl.pathname === '/healthz' || requestUrl.pathname === '/readyz') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: "HEALTHY", timestamp: new Date().toISOString() }));
         return;
     }
 
-    // GET Endpoint: Stream active transaction fields to the dashboard UI
     if (requestUrl.pathname === '/api/ledger' && req.method === 'GET') {
         const activeRequests = Array.from(dbApprovalRequests.values()).map(tx => ({
             id: tx.id,
@@ -85,7 +77,6 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // INGRESS PROXY ENFORCEMENT ROUTE: Intercepts external client tool requests
     if (requestUrl.pathname === '/mcp/tools/call' && req.method === 'POST') {
         let bodyAccumulator = '';
         req.on('data', chunk => {
@@ -110,13 +101,11 @@ const server = http.createServer((req, res) => {
                     return;
                 }
 
-                // Generates unpredictable cryptographic identifiers end-to-end
                 const txId = randomUUID();
                 const ts = new Date().toISOString();
                 const executionNonce = randomUUID();
 
                 if (policyMatch.requiresApproval) {
-                    // Lock state into durable persistent emulations before returning response
                     ledgerHeadHashChain = appendToHmacLedger(ledgerHeadHashChain, ++globalSequenceCounter, ts, "mcp_client_agent", mcpRequest.tool, policyMatch.targetTable, executionNonce, "PENDING");
                     
                     dbApprovalRequests.set(txId, {
@@ -145,13 +134,11 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // POST Endpoint: Evaluates and handles manual admin override permissions
     if (requestUrl.pathname === '/api/override' && req.method === 'POST') {
         let bodyAccumulator = '';
         req.on('data', chunk => { bodyAccumulator += chunk; });
         req.on('end', () => {
             try {
-                // NIST Identity Control: Deny-by-default token signature verification checking
                 const authHeader = req.headers['authorization'];
                 if (!authHeader || !authHeader.startsWith('Bearer sb_auth_jwt_') || !authHeader.includes("role_guardrail_admin")) {
                     res.writeHead(403, { 'Content-Type': 'application/json' });
@@ -168,7 +155,6 @@ const server = http.createServer((req, res) => {
                     return;
                 }
 
-                // Check time decay lazily on read access bounds
                 const isStale = new Date() > new Date(targetedTx.expiresAt);
                 if (targetedTx.status !== "PENDING" || isStale) {
                     if (isStale) targetedTx.status = "EXPIRED";
@@ -199,11 +185,12 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-Use code with caution.
-res.writeHead(404);
-res.end();
+    res.writeHead(404);
+    res.end();
 });
+
 server.listen(localServerManagementPort, () => {
-console.log(🌐 [SYSTEM COMPLIANCE NODE] Active live running on port: ${localServerManagementPort});
+    console.log(`🌐 [SYSTEM COMPLIANCE NODE] Active live running on port: ${localServerManagementPort}`);
 });
+
 setInterval(() => {}, 1000);
