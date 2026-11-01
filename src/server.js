@@ -37,7 +37,7 @@ function appendToHmacLedger(prevHash, seq, ts, actor, tool, target, nonce, decis
     return newHash;
 }
 
-// SECURITY SEED INITIALIZATION: Automatically stages an unexpired transaction on server boot
+// SECURITY SEED INITIALIZATION: Staging an active transaction on server initialization
 const initialTxId = randomUUID();
 const bootTs = new Date().toISOString();
 const bootNonce = randomUUID();
@@ -51,14 +51,14 @@ dbApprovalRequests.set(initialTxId, {
     riskLevel: "CRITICAL",
     signature: ledgerHeadHashChain,
     status: "PENDING",
-    expiresAt: new Date(Date.now() + 1200000).toISOString(), // Extends window to 20 minutes for stable review
+    expiresAt: new Date(Date.now() + 1200000).toISOString(), // 20-minute expiration window
     nonce: bootNonce,
     originalArgs: { target: "user_database_logs" }
 });
 
 const localServerManagementPort = process.env.PORT || 8080;
 const server = http.createServer((req, res) => {
-    // Open CORS baseline for public read-access fetches
+    // Open CORS headers baseline for public data read fetches
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -70,14 +70,17 @@ const server = http.createServer((req, res) => {
     }
 
     const requestUrl = new URL(req.url, `http://${req.headers.host}`);
+    const normalizedPath = requestUrl.pathname.toLowerCase();
 
-    if (requestUrl.pathname === '/healthz' || requestUrl.pathname === '/readyz') {
+    // Health monitoring check nodes
+    if (normalizedPath.includes('/healthz') || normalizedPath.includes('/readyz')) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: "HEALTHY", timestamp: new Date().toISOString() }));
         return;
     }
 
-    if (requestUrl.pathname === '/api/ledger' && req.method === 'GET') {
+    // Flexible Path Matching: Matches the endpoint even if subfolder mapping paths contain shifts
+    if (normalizedPath.includes('api/ledger') && req.method === 'GET') {
         const activeRequests = Array.from(dbApprovalRequests.values()).map(tx => ({
             id: tx.id,
             operation: tx.operation,
@@ -92,12 +95,12 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    if (requestUrl.pathname === '/mcp/tools/call' && req.method === 'POST') {
+    if (normalizedPath.includes('mcp/tools/call') && req.method === 'POST') {
         let bodyAccumulator = '';
         req.on('data', chunk => {
             if ((bodyAccumulator.length + chunk.length) > MAX_BODY_SIZE_BYTES) {
                 res.writeHead(413, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: "Payload volume exceeds safety threshold limits." }));
+                res.end(JSON.stringify({ error: "Payload volume size limit exceeded." }));
                 req.destroy();
                 return;
             }
@@ -112,7 +115,7 @@ const server = http.createServer((req, res) => {
 
                 if (!policyMatch) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ error: "Input Validation Failure: Unregistered tool signature configuration dropped." }));
+                    res.end(JSON.stringify({ error: "Input Validation Failure: Unregistered tool signature dropped." }));
                     return;
                 }
 
@@ -139,17 +142,17 @@ const server = http.createServer((req, res) => {
                     res.end(JSON.stringify({ status: "PENDING", approvalId: txId, message: "Critical action suspended. Manual authorization required." }));
                 } else {
                     res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ status: "EXECUTED", message: "Low-risk operation processed safely under least-privilege constraints." }));
+                    res.end(JSON.stringify({ status: "EXECUTED", message: "Low-risk operation processed safely." }));
                 }
             } catch (err) {
                 res.writeHead(400, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: "Invalid JSON transmission structure format." }));
+                res.end(JSON.stringify({ error: "Invalid JSON transmission format structure." }));
             }
         });
         return;
     }
 
-    if (requestUrl.pathname === '/api/override' && req.method === 'POST') {
+    if (normalizedPath.includes('api/override') && req.method === 'POST') {
         let bodyAccumulator = '';
         req.on('data', chunk => { bodyAccumulator += chunk; });
         req.on('end', () => {
@@ -174,7 +177,7 @@ const server = http.createServer((req, res) => {
                 if (targetedTx.status !== "PENDING" || isStale) {
                     if (isStale) targetedTx.status = "EXPIRED";
                     res.writeHead(409, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ success: false, error: "Conflict: Transaction window is stale, closed, or executed." }));
+                    res.end(JSON.stringify({ success: false, error: "Conflict: Transaction window is closed." }));
                     return;
                 }
 
