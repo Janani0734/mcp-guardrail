@@ -36,7 +36,6 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: "50kb" }));
 
-// High-Assurance Database Interface Bridge for Supabase (Durable Persistence Engine)
 function queryDatabase(endpointPath, httpMethod, dataBody = null) {
   return new Promise((resolve, reject) => {
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
@@ -102,12 +101,18 @@ function textResult(value, isError = false) {
 function createMcpServer() {
   const server = new McpServer({ name: "mcp-guardrail-sandbox", version: "0.1.0" });
 
-  server.registerTool("list_tasks", {}, async () => {
+  server.registerTool("list_tasks", { description: "List all tasks inside the database sandbox.", inputSchema: z.object({}) }, async () => {
     const databaseTasks = await queryDatabase("/sandbox_tasks?select=id,title,completed", "GET");
     return textResult({ sandbox: true, tasks: databaseTasks });
   });
 
-  server.registerTool("request_delete_task", { task_id: z.string().min(1) }, async ({ task_id }) => {
+  // Fixed: Correctly wraps the property within z.object as strictly required by MCP SDK v1 tools specifications
+  server.registerTool("request_delete_task", {
+    description: "Stage deletion of one sandbox task. Requires explicit human validation override.",
+    inputSchema: z.object({
+      task_id: z.string().describe("The exact text ID of the sandbox task row to delete.")
+    })
+  }, async ({ task_id }) => {
     const taskRecord = await queryDatabase(`/sandbox_tasks?id=eq.${task_id}&select=*`, "GET");
     if (!taskRecord || taskRecord.length === 0) return textResult({ error: "Task not found" }, true);
 
@@ -129,7 +134,12 @@ function createMcpServer() {
     return textResult({ requestId: newRequest.id, status: newRequest.status, expiresAt: newRequest.expires_at, message: "Pending admin approval." });
   });
 
-  server.registerTool("get_request_status", { request_id: z.string().uuid() }, async ({ request_id }) => {
+  server.registerTool("get_request_status", {
+    description: "Fetch the current processing outcome of a tracking token transaction.",
+    inputSchema: z.object({
+      request_id: z.string().uuid().describe("The UUID identifier tracking string of the request.")
+    })
+  }, async ({ request_id }) => {
     const matchedRequests = await queryDatabase(`/approval_requests?id=eq.${request_id}&select=*`, "GET");
     if (!matchedRequests || matchedRequests.length === 0) return textResult({ error: "Request not found" }, true);
     const validatedRequest = await expireRequestIfNeeded(matchedRequests[0]);
