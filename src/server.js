@@ -7,7 +7,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 
 const app = express();
 const PORT = Number(process.env.PORT || 10000);
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "https://janani0734.github.io/mcp-guardrail";
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "https://janani0734.github.io";
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY;
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -108,13 +108,13 @@ async function expireRequestIfNeeded(request) {
       { status: "EXPIRED" }
     );
     if (Array.isArray(updated) && updated.length === 1) {
-      return updated;
+      return updated[0];
     }
     const latest = await queryDatabase(`/approval_requests?id=eq.${encodeURIComponent(request.id)}&select=*`, "GET");
     if (!Array.isArray(latest) || latest.length !== 1) {
       throw new Error("Unable to retrieve current approval status.");
     }
-    return latest;
+    return latest[0];
   }
   return request;
 }
@@ -143,11 +143,11 @@ function createMcpServer() {
     const taskRecord = await queryDatabase(`/sandbox_tasks?id=eq.${task_id}&select=*`, "GET");
     if (!Array.isArray(taskRecord) || taskRecord.length === 0) return textResult({ error: "Task not found" }, true);
 
-    const actualTask = taskRecord;
+    const actualTask = taskRecord[0];
     const activeRequests = await queryDatabase(`/approval_requests?target=eq.${task_id}&status=eq.PENDING&select=*`, "GET");
     
     if (activeRequests && activeRequests.length > 0) {
-      const existingRequest = await expireRequestIfNeeded(activeRequests);
+      const existingRequest = await expireRequestIfNeeded(activeRequests[0]);
       if (existingRequest.status === "PENDING") {
         return textResult({ requestId: existingRequest.id, status: existingRequest.status, message: "Approval request already exists." });
       }
@@ -172,7 +172,7 @@ function createMcpServer() {
     const matchedRequests = await queryDatabase(`/approval_requests?id=eq.${request_id}&select=*`, "GET");
     if (!Array.isArray(matchedRequests) || matchedRequests.length === 0) return textResult({ error: "Request not found" }, true);
     
-    const validatedRequest = await expireRequestIfNeeded(matchedRequests);
+    const validatedRequest = await expireRequestIfNeeded(matchedRequests[0]);
     return textResult({
       id: validatedRequest.id, operation: validatedRequest.operation, target: validatedRequest.target,
       targetTitle: validatedRequest.target_title, requester: validatedRequest.requester,
@@ -242,29 +242,45 @@ app.post("/api/override", requireAdmin, asyncRoute(async (req, res) => {
     p_action: action
   });
 
-  if (!resultRPC) {
-    throw new Error("Unable to confirm finalized request via Database RPC transaction.");
-  }
+  const tx = Array.isArray(resultRPC)
+  ? resultRPC[0]
+  : resultRPC;
 
-  const tx = Array.isArray(resultRPC) ? resultRPC : resultRPC;
+if (
+  !tx ||
+  tx.id !== txId ||
+  typeof tx.status !== "string"
+) {
+  throw new Error(
+    "Database RPC returned an unexpected transaction."
+  );
+}
 
-  res.json({
-    success: true,
-    transaction: {
-      id: tx.id,
-      operation: tx.operation,
-      target: tx.target,
-      targetTitle: tx.target_title,
-      requester: tx.requester,
-      status: tx.status,
-      createdAt: tx.created_at,
-      expiresAt: tx.expires_at
-    }
+const transaction = {
+  id: tx.id,
+  operation: tx.operation,
+  target: tx.target,
+  targetTitle: tx.target_title,
+  requester: tx.requester,
+  status: tx.status,
+  createdAt: tx.created_at,
+  expiresAt: tx.expires_at
+};
+
+if (tx.status === "EXPIRED") {
+  return res.status(410).json({
+    success: false,
+    error: "Request expired.",
+    transaction
   });
-}));
+}
 
-app.get("/healthz", (_req, res) => res.json({ status: "ok" }));
-app.get("/", (_req, res) => res.json({ persistent: true }));
+res.json({
+  success:
+    tx.status === "COMMITTED" ||
+    tx.status === "REJECTED",
+  transaction
+});
 app.use((error, req, res, next) => {
 if (res.headersSent) return next(error);
 if (error.type === "entity.too.large") {
@@ -277,5 +293,5 @@ console.error("Request failed:", error.message);
 res.status(500).json({ error: "Request failed. Check server logs." });
 });
 app.listen(PORT, "0.0.0.0", () => {
-console.log(MCP persistent server active on port ${PORT});
+  console.log("MCP persistent server active on port " + PORT);
 });
