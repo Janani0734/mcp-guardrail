@@ -1,17 +1,13 @@
 import http from 'http';
-import https from 'https';
 import { randomUUID, createHmac } from 'crypto';
 import { URL } from 'url';
 
 console.log("\n========================================================");
-console.log("🛡️  MCP-GUARDRAIL AUDITED ENTERPRISE PRODUCTION SUITE v7.3.0");
+console.log("🛡️  MCP-GUARDRAIL AUDITED ENTERPRISE PRODUCTION SUITE v7.3.1");
 console.log("========================================================\n");
 
 const REAL_FRONTEND_ORIGIN = "https://github.io";
 const MAX_BODY_SIZE_BYTES = 1024 * 50;
-
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 const HMAC_SECRET_KEY = process.env.HMAC_SECRET_KEY || "isolated_kms_secret_key_seed";
 
 const sandboxRequests = new Map();
@@ -48,14 +44,13 @@ const server = http.createServer((req, res) => {
     const requestUrl = new URL(req.url, `http://${req.headers.host}`);
     const normalizedPath = requestUrl.pathname.toLowerCase();
 
-    // 1. OFFICIAL MCP PROTOCOL HANDSHAKE ROUTE (Server-Sent Events Transport)
-    if (normalizedPath === '/sse' && req.method === 'GET') {
+    // 1. FLEXIBLE MCP PROTOCOL HANDSHAKE ROUTE (Server-Sent Events)
+    if (normalizedPath.includes('sse') && req.method === 'GET') {
         res.writeHead(200, {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',
             'Connection': 'keep-alive'
         });
-        // Establish immediate transport connection mapping handshake with Claude Client
         res.write(`event: endpoint\ndata: ${encodeURIComponent('/mcp/tools/call')}\n\n`);
         
         const keepAliveInterval = setInterval(() => {
@@ -66,15 +61,14 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // 2. OFFICIAL MCP PROTOCOL LIST AND TOOLS SPECIFICATION
-    if (normalizedPath === '/mcp/tools/call' && req.method === 'POST') {
+    // 2. FLEXIBLE MCP PROTOCOL INTERCEPTION PATHWAY
+    if (normalizedPath.includes('mcp/tools/call') && req.method === 'POST') {
         let bodyAccumulator = '';
         req.on('data', chunk => { bodyAccumulator += chunk; });
         req.on('end', () => {
             try {
                 const mcpPayload = JSON.parse(bodyAccumulator);
 
-                // Handle Claude tool discovery protocol challenge queries natively
                 if (mcpPayload.method === 'tools/list') {
                     res.writeHead(200, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({
@@ -84,11 +78,11 @@ const server = http.createServer((req, res) => {
                             tools: [
                                 {
                                     name: "logs_wipe",
-                                    description: "Destructive firewall operation: Wipes server log databases. Requires multi-factor human administrator authorization override confirmation.",
+                                    description: "Wipes log databases. Requires admin authorization override verification.",
                                     inputSchema: {
                                         type: "object",
                                         properties: {
-                                            target: { type: "string", description: "The resource database cluster partition table name string." }
+                                            target: { type: "string", description: "The resource database table name string." }
                                         },
                                         required: ["target"]
                                     }
@@ -99,7 +93,6 @@ const server = http.createServer((req, res) => {
                     return;
                 }
 
-                // Handle Claude tool execution proxy calls safely
                 if (mcpPayload.method === 'tools/call') {
                     res.writeHead(200, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({
@@ -119,7 +112,7 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // 3. FRONTEND REST DATA FETCH PIPELINES
+    // 3. FRONTEND LEDGER FETCH CHANNELS
     if (normalizedPath.includes('api/ledger') && req.method === 'GET') {
         const isSandbox = requestUrl.searchParams.get('mode') === 'sandbox';
         res.writeHead(200, { 'Content-Type': 'application/json' });
