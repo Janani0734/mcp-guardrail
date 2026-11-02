@@ -1,146 +1,373 @@
-import http from 'http';
-import { randomUUID, createHmac } from 'crypto';
-import { URL } from 'url';
+import express from "express";
+import { randomUUID, timingSafeEqual } from "node:crypto";
+import { z } from "zod";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import {
+  StreamableHTTPServerTransport
+} from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 
-console.log("\n========================================================");
-console.log("🛡️  MCP-GUARDRAIL AUDITED ENTERPRISE PRODUCTION SUITE v7.3.1");
-console.log("========================================================\n");
+const app = express();
 
-const REAL_FRONTEND_ORIGIN = "https://github.io";
-const MAX_BODY_SIZE_BYTES = 1024 * 50;
-const HMAC_SECRET_KEY = process.env.HMAC_SECRET_KEY || "isolated_kms_secret_key_seed";
+const PORT = Number(process.env.PORT || 10000);
+const FRONTEND_ORIGIN =
+  process.env.FRONTEND_ORIGIN ||
+  "https://janani0734.github.io";
 
-const sandboxRequests = new Map();
-const protectedRequests = new Map();
+const ADMIN_API_KEY = process.env.ADMIN_API_KEY;
 
-function seedPendingTransaction(targetMap, id, operation, target, canary) {
-    const ts = new Date().toISOString();
-    const nonce = randomUUID();
-    const canonicalString = `0000000000000000||1||${ts}||mcp_client_agent||${operation}||${target}||${nonce}||PENDING`;
-    const signatureHash = createHmac('sha256', HMAC_SECRET_KEY).update(canonicalString).digest('hex');
-
-    targetMap.set(id, {
-        id: id, operation: operation, target: target, canary: canary,
-        signature: signatureHash, status: "PENDING",
-        expiresAt: new Date(Date.now() + 1200000).toISOString(), nonce: nonce
-    });
+if (!ADMIN_API_KEY || ADMIN_API_KEY.length < 32) {
+  throw new Error(
+    "Set ADMIN_API_KEY to a random secret of at least 32 characters."
+  );
 }
 
-seedPendingTransaction(sandboxRequests, "tx_demo_sandbox_verification_node", "logs.wipe", "disposable_test_data", "SANDBOX_MODE");
-seedPendingTransaction(protectedRequests, "tx_secure_admin_production_node", "logs.wipe", "production_enterprise_logs", "ENFORCED_POLICY_MODE");
+app.disable("x-powered-by");
 
-const localServerManagementPort = process.env.PORT || 8080;
-const server = http.createServer((req, res) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+// Browser origin restriction. This is not authentication.
+// Claude's server-to-server requests may have no Origin header.
+app.use((req, res, next) => {
+  const origin = req.get("Origin");
 
-    if (req.method === 'OPTIONS') {
-        res.writeHead(200);
-        res.end();
-        return;
-    }
+  if (origin && origin !== FRONTEND_ORIGIN) {
+    return res.status(403).json({ error: "Origin not allowed" });
+  }
 
-    const requestUrl = new URL(req.url, `http://${req.headers.host}`);
-    const normalizedPath = requestUrl.pathname.toLowerCase();
+  if (origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.vary("Origin");
+  }
 
-    // 1. FLEXIBLE MCP PROTOCOL HANDSHAKE ROUTE (Server-Sent Events)
-    if (normalizedPath.includes('sse') && req.method === 'GET') {
-        res.writeHead(200, {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive'
-        });
-        res.write(`event: endpoint\ndata: ${encodeURIComponent('/mcp/tools/call')}\n\n`);
-        
-        const keepAliveInterval = setInterval(() => {
-            res.write(': ping\n\n');
-        }, 15000);
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET, POST, DELETE, OPTIONS"
+  );
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, MCP-Protocol-Version, MCP-Session-Id"
+  );
 
-        req.on('close', () => clearInterval(keepAliveInterval));
-        return;
-    }
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
 
-    // 2. FLEXIBLE MCP PROTOCOL INTERCEPTION PATHWAY
-    if (normalizedPath.includes('mcp/tools/call') && req.method === 'POST') {
-        let bodyAccumulator = '';
-        req.on('data', chunk => { bodyAccumulator += chunk; });
-        req.on('end', () => {
-            try {
-                const mcpPayload = JSON.parse(bodyAccumulator);
-
-                if (mcpPayload.method === 'tools/list') {
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({
-                        jsonrpc: "2.0",
-                        id: mcpPayload.id,
-                        result: {
-                            tools: [
-                                {
-                                    name: "logs_wipe",
-                                    description: "Wipes log databases. Requires admin authorization override verification.",
-                                    inputSchema: {
-                                        type: "object",
-                                        properties: {
-                                            target: { type: "string", description: "The resource database table name string." }
-                                        },
-                                        required: ["target"]
-                                    }
-                                }
-                            ]
-                        }
-                    }));
-                    return;
-                }
-
-                if (mcpPayload.method === 'tools/call') {
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({
-                        jsonrpc: "2.0",
-                        id: mcpPayload.id,
-                        result: {
-                            content: [{ type: "text", text: "💥 Action suspended by firewall. Manual authorization card generated on your active web console panel dashboard." }]
-                        }
-                    }));
-                    return;
-                }
-            } catch (e) {
-                res.writeHead(400);
-                res.end();
-            }
-        });
-        return;
-    }
-
-    // 3. FRONTEND LEDGER FETCH CHANNELS
-    if (normalizedPath.includes('api/ledger') && req.method === 'GET') {
-        const isSandbox = requestUrl.searchParams.get('mode') === 'sandbox';
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(Array.from(isSandbox ? sandboxRequests.values() : protectedRequests.values())));
-        return;
-    }
-
-    if (normalizedPath.includes('api/override') && req.method === 'POST') {
-        let bodyAccumulator = '';
-        req.on('data', chunk => { bodyAccumulator += chunk; });
-        req.on('end', () => {
-            const command = JSON.parse(bodyAccumulator);
-            const targetMap = command.mode === 'sandbox' ? sandboxRequests : protectedRequests;
-            const targetedTx = targetMap.get(command.txId);
-            
-            if (targetedTx) {
-                targetedTx.status = command.action === 'ABORT' ? 'ROLLED_BACK' : 'COMMITTED';
-            }
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: true }));
-        });
-        return;
-    }
-
-    res.writeHead(404);
-    res.end();
+  next();
 });
 
-server.listen(localServerManagementPort, () => {
-    console.log(`🌐 [SYSTEM CORE] Split-Domain Zero-Trust Firewall active on port: ${localServerManagementPort}`);
+app.use(express.json({ limit: "50kb" }));
+
+// Disposable shared sandbox only. No production database.
+const tasks = new Map([
+  ["demo-task-1", {
+    id: "demo-task-1",
+    title: "Disposable MCP approval test",
+    completed: true
+  }],
+  ["demo-task-2", {
+    id: "demo-task-2",
+    title: "Keep this record unchanged",
+    completed: false
+  }]
+]);
+
+const requests = new Map();
+const auditEvents = [];
+
+const MAX_REQUESTS = 500;
+const APPROVAL_WINDOW_MS = 5 * 60 * 1000;
+
+function audit(action, details) {
+  auditEvents.push({
+    id: randomUUID(),
+    timestamp: new Date().toISOString(),
+    action,
+    ...details
+  });
+
+  // Bounded diagnostic history, not a compliance ledger.
+  if (auditEvents.length > 1000) auditEvents.shift();
+}
+
+function expireIfNeeded(request) {
+  if (
+    request.status === "PENDING" &&
+    Date.now() >= Date.parse(request.expiresAt)
+  ) {
+    request.status = "EXPIRED";
+    audit("REQUEST_EXPIRED", { requestId: request.id });
+  }
+
+  return request;
+}
+
+function textResult(value, isError = false) {
+  return {
+    content: [{
+      type: "text",
+      text: JSON.stringify(value, null, 2)
+    }],
+    ...(isError ? { isError: true } : {})
+  };
+}
+
+function createMcpServer() {
+  const server = new McpServer({
+    name: "mcp-guardrail-sandbox",
+    version: "0.1.0"
+  });
+
+  server.registerTool(
+    "list_tasks",
+    {
+      description:
+        "Read disposable sandbox tasks. No production data is accessible.",
+      inputSchema: {}
+    },
+    async () => textResult({
+      sandbox: true,
+      tasks: Array.from(tasks.values())
+    })
+  );
+
+  server.registerTool(
+    "request_delete_task",
+    {
+      description:
+        "Stage deletion of one sandbox task. Does not delete it. " +
+        "A separate administrator must approve in the control API.",
+      inputSchema: {
+        task_id: z.string().min(1).max(100)
+      }
+    },
+    async ({ task_id }) => {
+      const task = tasks.get(task_id);
+
+      if (!task) {
+        return textResult({ error: "Task not found" }, true);
+      }
+
+      for (const request of requests.values()) {
+        expireIfNeeded(request);
+
+        if (
+          request.target === task_id &&
+          request.status === "PENDING"
+        ) {
+          return textResult({
+            requestId: request.id,
+            status: request.status,
+            expiresAt: request.expiresAt,
+            message: "An approval request already exists."
+          });
+        }
+      }
+
+      if (requests.size >= MAX_REQUESTS) {
+        return textResult({
+          error: "Sandbox request capacity reached."
+        }, true);
+      }
+
+      const request = {
+        id: randomUUID(),
+        operation: "DELETE_TASK",
+        target: task_id,
+        targetTitle: task.title,
+        requester: "unauthenticated-demo-mcp-client",
+        status: "PENDING",
+        createdAt: new Date().toISOString(),
+        expiresAt:
+          new Date(Date.now() + APPROVAL_WINDOW_MS).toISOString()
+      };
+
+      requests.set(request.id, request);
+      audit("REQUEST_STAGED", { requestId: request.id, taskId: task_id });
+
+      return textResult({
+        requestId: request.id,
+        status: request.status,
+        expiresAt: request.expiresAt,
+        message:
+          "Pending separate administrator approval. " +
+          "No data has been deleted. No automatic execution."
+      });
+    }
+  );
+
+  server.registerTool(
+    "get_request_status",
+    {
+      description: "Read the outcome of a sandbox approval request.",
+      inputSchema: {
+        request_id: z.string().uuid()
+      }
+    },
+    async ({ request_id }) => {
+      const request = requests.get(request_id);
+
+      if (!request) {
+        return textResult({ error: "Request not found" }, true);
+      }
+
+      return textResult(expireIfNeeded(request));
+    }
+  );
+
+  return server;
+}
+
+// Each POST gets an isolated MCP server and transport.
+// Tools share only the explicit disposable sandbox state above.
+app.post("/mcp", async (req, res) => {
+  const server = createMcpServer();
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true
+  });
+
+  res.on("close", () => {
+    void transport.close().catch(console.error);
+    void server.close().catch(console.error);
+  });
+
+  try {
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+  } catch (error) {
+    console.error("MCP request failed:", error.message);
+
+    if (!res.headersSent) {
+      res.status(500).json({
+        jsonrpc: "2.0",
+        id: null,
+        error: { code: -32603, message: "Internal MCP error" }
+      });
+    }
+  }
+});
+
+// No standalone event stream or resumable sessions in this demo.
+app.get("/mcp", (_req, res) => res.sendStatus(405));
+app.delete("/mcp", (_req, res) => res.sendStatus(405));
+
+function requireAdmin(req, res, next) {
+  const header = req.get("Authorization") || "";
+  const supplied = header.startsWith("Bearer ")
+    ? header.slice(7)
+    : "";
+
+  const expectedBuffer = Buffer.from(ADMIN_API_KEY);
+  const suppliedBuffer = Buffer.from(supplied);
+
+  if (
+    suppliedBuffer.length !== expectedBuffer.length ||
+    !timingSafeEqual(suppliedBuffer, expectedBuffer)
+  ) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  next();
+}
+
+app.get("/", (_req, res) => {
+  res.json({
+    name: "MCP-Guardrail Sandbox",
+    mcpEndpoint: "/mcp",
+    transport: "Streamable HTTP",
+    sandbox: true,
+    persistence: "In-memory; resets on restart"
+  });
+});
+
+app.get("/healthz", (_req, res) => {
+  res.json({ status: "ok" });
+});
+
+app.get("/api/ledger", requireAdmin, (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+
+  res.json({
+    serverTime: new Date().toISOString(),
+    transactions:
+      Array.from(requests.values()).map(expireIfNeeded)
+  });
+});
+
+const overrideSchema = z.object({
+  txId: z.string().uuid(),
+  action: z.enum(["APPROVE", "ABORT"])
+}).strict();
+
+app.post("/api/override", requireAdmin, (req, res) => {
+  const parsed = overrideSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid command" });
+  }
+
+  const { txId, action } = parsed.data;
+  const request = requests.get(txId);
+
+  if (!request) {
+    return res.status(404).json({ error: "Request not found" });
+  }
+
+  expireIfNeeded(request);
+
+  if (request.status === "EXPIRED") {
+    return res.status(410).json({ error: "Request expired" });
+  }
+
+  if (request.status !== "PENDING") {
+    return res.status(409).json({
+      error: "Request already finalized",
+      status: request.status
+    });
+  }
+
+  // Synchronous single-process demo transition.
+  // Replace with a database transaction for durable/multi-instance use.
+  if (action === "ABORT") {
+    request.status = "REJECTED";
+  } else {
+    const deleted = tasks.delete(request.target);
+    request.status = deleted ? "COMMITTED" : "FAILED";
+  }
+
+  request.completedAt = new Date().toISOString();
+
+  audit("REQUEST_FINALIZED", {
+    requestId: request.id,
+    decision: action,
+    outcome: request.status,
+    actor: "demo-admin-api-key"
+  });
+
+  res.json({
+    success:
+      request.status === "COMMITTED" ||
+      request.status === "REJECTED",
+    transaction: request
+  });
+});
+
+app.get("/api/audit", requireAdmin, (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.json(auditEvents);
+});
+
+app.use((error, _req, res, _next) => {
+  if (error.type === "entity.too.large") {
+    return res.status(413).json({ error: "Body exceeds 50 KB" });
+  }
+
+  if (error.type === "entity.parse.failed") {
+    return res.status(400).json({ error: "Invalid JSON" });
+  }
+
+  console.error(error.message);
+  res.status(500).json({ error: "Internal server error" });
+});
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`MCP sandbox listening on port ${PORT}`);
 });
