@@ -7,7 +7,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 
 const app = express();
 const PORT = Number(process.env.PORT || 10000);
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "https://github.io";
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "https://janani0734.github.io/mcp-guardrail";
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY;
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -108,13 +108,13 @@ async function expireRequestIfNeeded(request) {
       { status: "EXPIRED" }
     );
     if (Array.isArray(updated) && updated.length === 1) {
-      return updated[0];
+      return updated;
     }
     const latest = await queryDatabase(`/approval_requests?id=eq.${encodeURIComponent(request.id)}&select=*`, "GET");
     if (!Array.isArray(latest) || latest.length !== 1) {
       throw new Error("Unable to retrieve current approval status.");
     }
-    return latest[0];
+    return latest;
   }
   return request;
 }
@@ -143,11 +143,11 @@ function createMcpServer() {
     const taskRecord = await queryDatabase(`/sandbox_tasks?id=eq.${task_id}&select=*`, "GET");
     if (!Array.isArray(taskRecord) || taskRecord.length === 0) return textResult({ error: "Task not found" }, true);
 
-    const actualTask = taskRecord[0];
+    const actualTask = taskRecord;
     const activeRequests = await queryDatabase(`/approval_requests?target=eq.${task_id}&status=eq.PENDING&select=*`, "GET");
     
     if (activeRequests && activeRequests.length > 0) {
-      const existingRequest = await expireRequestIfNeeded(activeRequests[0]);
+      const existingRequest = await expireRequestIfNeeded(activeRequests);
       if (existingRequest.status === "PENDING") {
         return textResult({ requestId: existingRequest.id, status: existingRequest.status, message: "Approval request already exists." });
       }
@@ -172,7 +172,7 @@ function createMcpServer() {
     const matchedRequests = await queryDatabase(`/approval_requests?id=eq.${request_id}&select=*`, "GET");
     if (!Array.isArray(matchedRequests) || matchedRequests.length === 0) return textResult({ error: "Request not found" }, true);
     
-    const validatedRequest = await expireRequestIfNeeded(matchedRequests[0]);
+    const validatedRequest = await expireRequestIfNeeded(matchedRequests);
     return textResult({
       id: validatedRequest.id, operation: validatedRequest.operation, target: validatedRequest.target,
       targetTitle: validatedRequest.target_title, requester: validatedRequest.requester,
@@ -246,7 +246,7 @@ app.post("/api/override", requireAdmin, asyncRoute(async (req, res) => {
     throw new Error("Unable to confirm finalized request via Database RPC transaction.");
   }
 
-  const tx = Array.isArray(resultRPC) ? resultRPC[0] : resultRPC;
+  const tx = Array.isArray(resultRPC) ? resultRPC : resultRPC;
 
   res.json({
     success: true,
@@ -262,6 +262,7 @@ app.post("/api/override", requireAdmin, asyncRoute(async (req, res) => {
     }
   });
 }));
+
 app.get("/healthz", (_req, res) => res.json({ status: "ok" }));
 app.get("/", (_req, res) => res.json({ persistent: true }));
 app.use((error, req, res, next) => {
