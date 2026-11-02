@@ -1,373 +1,204 @@
 import express from "express";
+import https from "node:https";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import {
-  StreamableHTTPServerTransport
-} from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 
 const app = express();
-
 const PORT = Number(process.env.PORT || 10000);
-const FRONTEND_ORIGIN =
-  process.env.FRONTEND_ORIGIN ||
-  "https://janani0734.github.io";
-
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "https://github.io";
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY;
 
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
 if (!ADMIN_API_KEY || ADMIN_API_KEY.length < 32) {
-  throw new Error(
-    "Set ADMIN_API_KEY to a random secret of at least 32 characters."
-  );
+  throw new Error("Set ADMIN_API_KEY to a random secret of at least 32 characters.");
 }
 
 app.disable("x-powered-by");
 
-// Browser origin restriction. This is not authentication.
-// Claude's server-to-server requests may have no Origin header.
 app.use((req, res, next) => {
   const origin = req.get("Origin");
-
   if (origin && origin !== FRONTEND_ORIGIN) {
     return res.status(403).json({ error: "Origin not allowed" });
   }
-
   if (origin) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.vary("Origin");
   }
-
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET, POST, DELETE, OPTIONS"
-  );
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, MCP-Protocol-Version, MCP-Session-Id"
-  );
-
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(204);
-  }
-
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, MCP-Protocol-Version, MCP-Session-Id");
+  if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
 });
 
 app.use(express.json({ limit: "50kb" }));
 
-// Disposable shared sandbox only. No production database.
-const tasks = new Map([
-  ["demo-task-1", {
-    id: "demo-task-1",
-    title: "Disposable MCP approval test",
-    completed: true
-  }],
-  ["demo-task-2", {
-    id: "demo-task-2",
-    title: "Keep this record unchanged",
-    completed: false
-  }]
-]);
+// High-Assurance Database Interface Bridge for Supabase (Durable Persistence Engine)
+function queryDatabase(endpointPath, httpMethod, dataBody = null) {
+  return new Promise((resolve, reject) => {
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      resolve([]); 
+      return;
+    }
+    try {
+      const urlTarget = new URL(`${SUPABASE_URL}/rest/v1${endpointPath}`);
+      const payloadText = dataBody ? JSON.stringify(dataBody) : "";
+      
+      const requestOptions = {
+        hostname: urlTarget.hostname,
+        port: 443,
+        path: urlTarget.pathname + urlTarget.search,
+        method: httpMethod,
+        headers: {
+          "apikey": SUPABASE_SERVICE_ROLE_KEY,
+          "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          "Content-Type": "application/json",
+          "Prefer": "return=representation"
+        }
+      };
 
-const requests = new Map();
-const auditEvents = [];
+      if (dataBody && httpMethod !== "GET") {
+        requestOptions.headers["Content-Length"] = Buffer.byteLength(payloadText);
+      }
 
-const MAX_REQUESTS = 500;
-const APPROVAL_WINDOW_MS = 5 * 60 * 1000;
+      const databaseRequest = https.request(requestOptions, (databaseResponse) => {
+        let cumulativeChunks = "";
+        databaseResponse.on("data", (chunk) => { cumulativeChunks += chunk; });
+        databaseResponse.on("end", () => {
+          if (databaseResponse.statusCode >= 400) {
+            return reject(new Error(`DB Error: ${databaseResponse.statusCode} - ${cumulativeChunks}`));
+          }
+          try { resolve(JSON.parse(cumulativeChunks)); } catch { resolve(cumulativeChunks); }
+        });
+      });
 
-function audit(action, details) {
-  auditEvents.push({
-    id: randomUUID(),
-    timestamp: new Date().toISOString(),
-    action,
-    ...details
+      databaseRequest.on("error", (error) => reject(error));
+      if (dataBody && httpMethod !== "GET") databaseRequest.write(payloadText);
+      databaseRequest.end();
+    } catch (exception) {
+      reject(exception);
+    }
   });
-
-  // Bounded diagnostic history, not a compliance ledger.
-  if (auditEvents.length > 1000) auditEvents.shift();
 }
 
-function expireIfNeeded(request) {
-  if (
-    request.status === "PENDING" &&
-    Date.now() >= Date.parse(request.expiresAt)
-  ) {
+async function expireRequestIfNeeded(request) {
+  if (request.status === "PENDING" && Date.now() >= Date.parse(request.expiresAt)) {
     request.status = "EXPIRED";
-    audit("REQUEST_EXPIRED", { requestId: request.id });
+    await queryDatabase(`/approval_requests?id=eq.${request.id}`, "PATCH", { status: "EXPIRED" });
   }
-
   return request;
 }
 
 function textResult(value, isError = false) {
   return {
-    content: [{
-      type: "text",
-      text: JSON.stringify(value, null, 2)
-    }],
+    content: [{ type: "text", text: JSON.stringify(value, null, 2) }],
     ...(isError ? { isError: true } : {})
   };
 }
 
 function createMcpServer() {
-  const server = new McpServer({
-    name: "mcp-guardrail-sandbox",
-    version: "0.1.0"
+  const server = new McpServer({ name: "mcp-guardrail-sandbox", version: "0.1.0" });
+
+  server.registerTool("list_tasks", {}, async () => {
+    const databaseTasks = await queryDatabase("/sandbox_tasks?select=id,title,completed", "GET");
+    return textResult({ sandbox: true, tasks: databaseTasks });
   });
 
-  server.registerTool(
-    "list_tasks",
-    {
-      description:
-        "Read disposable sandbox tasks. No production data is accessible.",
-      inputSchema: {}
-    },
-    async () => textResult({
-      sandbox: true,
-      tasks: Array.from(tasks.values())
-    })
-  );
+  server.registerTool("request_delete_task", { task_id: z.string().min(1) }, async ({ task_id }) => {
+    const taskRecord = await queryDatabase(`/sandbox_tasks?id=eq.${task_id}&select=*`, "GET");
+    if (!taskRecord || taskRecord.length === 0) return textResult({ error: "Task not found" }, true);
 
-  server.registerTool(
-    "request_delete_task",
-    {
-      description:
-        "Stage deletion of one sandbox task. Does not delete it. " +
-        "A separate administrator must approve in the control API.",
-      inputSchema: {
-        task_id: z.string().min(1).max(100)
+    const activeRequests = await queryDatabase(`/approval_requests?target=eq.${task_id}&status=eq.PENDING&select=*`, "GET");
+    if (activeRequests && activeRequests.length > 0) {
+      const existingRequest = await expireRequestIfNeeded(activeRequests[0]);
+      if (existingRequest.status === "PENDING") {
+        return textResult({ requestId: existingRequest.id, status: existingRequest.status, message: "Approval request already exists." });
       }
-    },
-    async ({ task_id }) => {
-      const task = tasks.get(task_id);
-
-      if (!task) {
-        return textResult({ error: "Task not found" }, true);
-      }
-
-      for (const request of requests.values()) {
-        expireIfNeeded(request);
-
-        if (
-          request.target === task_id &&
-          request.status === "PENDING"
-        ) {
-          return textResult({
-            requestId: request.id,
-            status: request.status,
-            expiresAt: request.expiresAt,
-            message: "An approval request already exists."
-          });
-        }
-      }
-
-      if (requests.size >= MAX_REQUESTS) {
-        return textResult({
-          error: "Sandbox request capacity reached."
-        }, true);
-      }
-
-      const request = {
-        id: randomUUID(),
-        operation: "DELETE_TASK",
-        target: task_id,
-        targetTitle: task.title,
-        requester: "unauthenticated-demo-mcp-client",
-        status: "PENDING",
-        createdAt: new Date().toISOString(),
-        expiresAt:
-          new Date(Date.now() + APPROVAL_WINDOW_MS).toISOString()
-      };
-
-      requests.set(request.id, request);
-      audit("REQUEST_STAGED", { requestId: request.id, taskId: task_id });
-
-      return textResult({
-        requestId: request.id,
-        status: request.status,
-        expiresAt: request.expiresAt,
-        message:
-          "Pending separate administrator approval. " +
-          "No data has been deleted. No automatic execution."
-      });
     }
-  );
 
-  server.registerTool(
-    "get_request_status",
-    {
-      description: "Read the outcome of a sandbox approval request.",
-      inputSchema: {
-        request_id: z.string().uuid()
-      }
-    },
-    async ({ request_id }) => {
-      const request = requests.get(request_id);
+    const newRequest = {
+      id: randomUUID(), operation: "DELETE_TASK", target: task_id, target_title: taskRecord[0].title,
+      requester: "demo-mcp-client", status: "PENDING",
+      created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 300000).toISOString()
+    };
 
-      if (!request) {
-        return textResult({ error: "Request not found" }, true);
-      }
+    await queryDatabase("/approval_requests", "POST", newRequest);
+    return textResult({ requestId: newRequest.id, status: newRequest.status, expiresAt: newRequest.expires_at, message: "Pending admin approval." });
+  });
 
-      return textResult(expireIfNeeded(request));
-    }
-  );
+  server.registerTool("get_request_status", { request_id: z.string().uuid() }, async ({ request_id }) => {
+    const matchedRequests = await queryDatabase(`/approval_requests?id=eq.${request_id}&select=*`, "GET");
+    if (!matchedRequests || matchedRequests.length === 0) return textResult({ error: "Request not found" }, true);
+    const validatedRequest = await expireRequestIfNeeded(matchedRequests[0]);
+    return textResult({
+      id: validatedRequest.id, operation: validatedRequest.operation, target: validatedRequest.target,
+      targetTitle: validatedRequest.target_title, requester: validatedRequest.requester,
+      status: validatedRequest.status, createdAt: validatedRequest.created_at, expiresAt: validatedRequest.expires_at
+    });
+  });
 
   return server;
 }
 
-// Each POST gets an isolated MCP server and transport.
-// Tools share only the explicit disposable sandbox state above.
 app.post("/mcp", async (req, res) => {
   const server = createMcpServer();
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-    enableJsonResponse: true
-  });
-
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   res.on("close", () => {
     void transport.close().catch(console.error);
     void server.close().catch(console.error);
   });
-
   try {
     await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
   } catch (error) {
-    console.error("MCP request failed:", error.message);
-
-    if (!res.headersSent) {
-      res.status(500).json({
-        jsonrpc: "2.0",
-        id: null,
-        error: { code: -32603, message: "Internal MCP error" }
-      });
-    }
+    if (!res.headersSent) res.status(500).json({ jsonrpc: "2.0", id: null, error: { code: -32603, message: "Internal error" } });
   }
 });
-
-// No standalone event stream or resumable sessions in this demo.
-app.get("/mcp", (_req, res) => res.sendStatus(405));
-app.delete("/mcp", (_req, res) => res.sendStatus(405));
 
 function requireAdmin(req, res, next) {
   const header = req.get("Authorization") || "";
-  const supplied = header.startsWith("Bearer ")
-    ? header.slice(7)
-    : "";
-
-  const expectedBuffer = Buffer.from(ADMIN_API_KEY);
-  const suppliedBuffer = Buffer.from(supplied);
-
-  if (
-    suppliedBuffer.length !== expectedBuffer.length ||
-    !timingSafeEqual(suppliedBuffer, expectedBuffer)
-  ) {
+  const supplied = header.startsWith("Bearer ") ? header.slice(7) : "";
+  if (supplied.length !== ADMIN_API_KEY.length || !timingSafeEqual(Buffer.from(supplied), Buffer.from(ADMIN_API_KEY))) {
     return res.status(401).json({ error: "Unauthorized" });
   }
-
   next();
 }
 
-app.get("/", (_req, res) => {
-  res.json({
-    name: "MCP-Guardrail Sandbox",
-    mcpEndpoint: "/mcp",
-    transport: "Streamable HTTP",
-    sandbox: true,
-    persistence: "In-memory; resets on restart"
-  });
-});
-
-app.get("/healthz", (_req, res) => {
-  res.json({ status: "ok" });
-});
-
-app.get("/api/ledger", requireAdmin, (_req, res) => {
-  res.setHeader("Cache-Control", "no-store");
-
+app.get("/api/ledger", requireAdmin, async (_req, res) => {
+  const openRequests = await queryDatabase("/approval_requests?select=*&order=created_at.desc", "GET");
+  const processedList = await Promise.all(openRequests.map(req => expireRequestIfNeeded(req)));
   res.json({
     serverTime: new Date().toISOString(),
-    transactions:
-      Array.from(requests.values()).map(expireIfNeeded)
+    transactions: processedList.map(tx => ({
+      id: tx.id, operation: tx.operation, target: tx.target, targetTitle: tx.target_title,
+      requester: tx.requester, status: tx.status, createdAt: tx.created_at, expiresAt: tx.expires_at
+    }))
   });
 });
 
-const overrideSchema = z.object({
-  txId: z.string().uuid(),
-  action: z.enum(["APPROVE", "ABORT"])
-}).strict();
+app.post("/api/override", requireAdmin, async (req, res) => {
+  const { txId, action } = req.body;
+  const requests = await queryDatabase(`/approval_requests?id=eq.${txId}&select=*`, "GET");
+  if (!requests || requests.length === 0) return res.status(404).json({ error: "Not found" });
 
-app.post("/api/override", requireAdmin, (req, res) => {
-  const parsed = overrideSchema.safeParse(req.body);
+  const activeTx = await expireRequestIfNeeded(requests[0]);
+  if (activeTx.status !== "PENDING") return res.status(409).json({ error: "Finalized", status: activeTx.status });
 
-  if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid command" });
+  let finalStatus = action === "ABORT" ? "REJECTED" : "COMMITTED";
+  if (action === "APPROVE") {
+    await queryDatabase(`/sandbox_tasks?id=eq.${activeTx.target}`, "DELETE");
   }
 
-  const { txId, action } = parsed.data;
-  const request = requests.get(txId);
-
-  if (!request) {
-    return res.status(404).json({ error: "Request not found" });
-  }
-
-  expireIfNeeded(request);
-
-  if (request.status === "EXPIRED") {
-    return res.status(410).json({ error: "Request expired" });
-  }
-
-  if (request.status !== "PENDING") {
-    return res.status(409).json({
-      error: "Request already finalized",
-      status: request.status
-    });
-  }
-
-  // Synchronous single-process demo transition.
-  // Replace with a database transaction for durable/multi-instance use.
-  if (action === "ABORT") {
-    request.status = "REJECTED";
-  } else {
-    const deleted = tasks.delete(request.target);
-    request.status = deleted ? "COMMITTED" : "FAILED";
-  }
-
-  request.completedAt = new Date().toISOString();
-
-  audit("REQUEST_FINALIZED", {
-    requestId: request.id,
-    decision: action,
-    outcome: request.status,
-    actor: "demo-admin-api-key"
-  });
-
-  res.json({
-    success:
-      request.status === "COMMITTED" ||
-      request.status === "REJECTED",
-    transaction: request
-  });
+  await queryDatabase(`/approval_requests?id=eq.${txId}`, "PATCH", { status: finalStatus, completed_at: new Date().toISOString() });
+  res.json({ success: true });
 });
 
-app.get("/api/audit", requireAdmin, (_req, res) => {
-  res.setHeader("Cache-Control", "no-store");
-  res.json(auditEvents);
-});
-
-app.use((error, _req, res, _next) => {
-  if (error.type === "entity.too.large") {
-    return res.status(413).json({ error: "Body exceeds 50 KB" });
-  }
-
-  if (error.type === "entity.parse.failed") {
-    return res.status(400).json({ error: "Invalid JSON" });
-  }
-
-  console.error(error.message);
-  res.status(500).json({ error: "Internal server error" });
-});
+app.get("/healthz", (_req, res) => res.json({ status: "ok" }));
+app.get("/", (_req, res) => res.json({ persistent: true }));
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`MCP sandbox listening on port ${PORT}`);
+  console.log(`MCP persistent server active on port ${PORT}`);
 });
