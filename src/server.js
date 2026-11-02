@@ -101,22 +101,27 @@ function textResult(value, isError = false) {
 function createMcpServer() {
   const server = new McpServer({ name: "mcp-guardrail-sandbox", version: "0.1.0" });
 
-  server.registerTool("list_tasks", { description: "List all tasks inside the database sandbox.", inputSchema: z.object({}) }, async () => {
+  server.registerTool("list_tasks", { description: "List all tasks inside the database sandbox." }, async () => {
     const databaseTasks = await queryDatabase("/sandbox_tasks?select=id,title,completed", "GET");
     return textResult({ sandbox: true, tasks: databaseTasks });
   });
 
-  // Fixed: Correctly wraps the property within z.object as strictly required by MCP SDK v1 tools specifications
   server.registerTool("request_delete_task", {
-    description: "Stage deletion of one sandbox task. Requires explicit human validation override.",
-    inputSchema: z.object({
-      task_id: z.string().describe("The exact text ID of the sandbox task row to delete.")
-    })
+    description: "Stage deletion of one sandbox task.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task_id: { type: "string", description: "The exact text ID of the sandbox task row to delete." }
+      },
+      required: ["task_id"]
+    }
   }, async ({ task_id }) => {
     const taskRecord = await queryDatabase(`/sandbox_tasks?id=eq.${task_id}&select=*`, "GET");
-    if (!taskRecord || taskRecord.length === 0) return textResult({ error: "Task not found" }, true);
+    if (!Array.isArray(taskRecord) || taskRecord.length === 0) return textResult({ error: "Task not found" }, true);
 
+    const actualTask = taskRecord[0];
     const activeRequests = await queryDatabase(`/approval_requests?target=eq.${task_id}&status=eq.PENDING&select=*`, "GET");
+    
     if (activeRequests && activeRequests.length > 0) {
       const existingRequest = await expireRequestIfNeeded(activeRequests[0]);
       if (existingRequest.status === "PENDING") {
@@ -125,7 +130,7 @@ function createMcpServer() {
     }
 
     const newRequest = {
-      id: randomUUID(), operation: "DELETE_TASK", target: task_id, target_title: taskRecord[0].title,
+      id: randomUUID(), operation: "DELETE_TASK", target: task_id, target_title: actualTask.title,
       requester: "demo-mcp-client", status: "PENDING",
       created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 300000).toISOString()
     };
@@ -136,12 +141,17 @@ function createMcpServer() {
 
   server.registerTool("get_request_status", {
     description: "Fetch the current processing outcome of a tracking token transaction.",
-    inputSchema: z.object({
-      request_id: z.string().uuid().describe("The UUID identifier tracking string of the request.")
-    })
+    inputSchema: {
+      type: "object",
+      properties: {
+        request_id: { type: "string", description: "The UUID identifier tracking string of the request." }
+      },
+      required: ["request_id"]
+    }
   }, async ({ request_id }) => {
     const matchedRequests = await queryDatabase(`/approval_requests?id=eq.${request_id}&select=*`, "GET");
-    if (!matchedRequests || matchedRequests.length === 0) return textResult({ error: "Request not found" }, true);
+    if (!Array.isArray(matchedRequests) || matchedRequests.length === 0) return textResult({ error: "Request not found" }, true);
+    
     const validatedRequest = await expireRequestIfNeeded(matchedRequests[0]);
     return textResult({
       id: validatedRequest.id, operation: validatedRequest.operation, target: validatedRequest.target,
@@ -192,7 +202,7 @@ app.get("/api/ledger", requireAdmin, async (_req, res) => {
 app.post("/api/override", requireAdmin, async (req, res) => {
   const { txId, action } = req.body;
   const requests = await queryDatabase(`/approval_requests?id=eq.${txId}&select=*`, "GET");
-  if (!requests || requests.length === 0) return res.status(404).json({ error: "Not found" });
+  if (!Array.isArray(requests) || requests.length === 0) return res.status(404).json({ error: "Not found" });
 
   const activeTx = await expireRequestIfNeeded(requests[0]);
   if (activeTx.status !== "PENDING") return res.status(409).json({ error: "Finalized", status: activeTx.status });
