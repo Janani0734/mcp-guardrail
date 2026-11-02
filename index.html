@@ -1,184 +1,785 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MCP-Guardrail Test Console</title>
-<style>
-:root{color-scheme:dark}body{margin:0;background:#0b1020;color:#eef2ff;font:16px system-ui;line-height:1.5}main{max-width:980px;margin:auto;padding:32px 20px}section,article{background:#151e32;border:1px solid #33415e;padding:24px;border-radius:14px;margin:20px 0}button,input{font:inherit;padding:12px;border-radius:8px}input{display:block;box-sizing:border-box;width:100%;margin:8px 0 16px;background:#0b1020;color:white;border:1px solid #72809a}button{cursor:pointer;border:0;background:#b9afff;color:#121126;margin:4px}button:disabled{opacity:.5;cursor:wait}button:focus-visible,input:focus-visible{outline:3px solid #ffcf57;outline-offset:3px}.reject{background:#ffb1b1}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0b1020;padding:16px}#message{white-space:pre-wrap;color:#ffdc8b}.muted{color:#b6bfd2}h1{font-size:28px}h2{font-size:21px}.actions{display:flex;flex-wrap:wrap;gap:8px}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MCP-Guardrail | Sandbox Console</title>
+
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #090e1b;
+      --surface: #141d30;
+      --border: #33415c;
+      --text: #edf2ff;
+      --muted: #b3bed4;
+      --primary: #b7a9ff;
+      --danger: #ffb3bf;
+      --success: #79e5c5;
+      --warning: #ffd477;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, sans-serif;
+      line-height: 1.6;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    main {
+      max-width: 1050px;
+      margin: auto;
+      padding: 28px 18px 60px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 22px;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(23px, 5vw, 32px);
+    }
+
+    h2 {
+      margin-top: 0;
+      font-size: 22px;
+    }
+
+    p {
+      margin: 10px 0;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .badge {
+      background: #24213e;
+      color: #ddd5ff;
+      padding: 7px 12px;
+      border-radius: 30px;
+      font-size: 14px;
+    }
+
+    .panel,
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+
+    .hero {
+      padding: 38px 24px;
+    }
+
+    .hero h2 {
+      font-size: clamp(25px, 5vw, 36px);
+    }
+
+    .notice {
+      border-left: 4px solid var(--warning);
+      background: #292516;
+      padding: 12px 16px;
+      border-radius: 8px;
+      color: #ffe6ae;
+      margin: 18px 0;
+    }
+
+    label {
+      display: block;
+      margin-top: 18px;
+    }
+
+    input,
+    button {
+      font: inherit;
+      border-radius: 9px;
+    }
+
+    input {
+      display: block;
+      width: 100%;
+      margin-top: 7px;
+      padding: 12px;
+      color: var(--text);
+      background: var(--bg);
+      border: 1px solid #71809b;
+    }
+
+    button {
+      border: 0;
+      padding: 11px 17px;
+      cursor: pointer;
+      background: var(--primary);
+      color: #171126;
+      font-weight: 650;
+    }
+
+    button.secondary {
+      color: var(--text);
+      background: #2b3852;
+    }
+
+    button.reject {
+      background: var(--danger);
+      color: #39101b;
+    }
+
+    button:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    button:focus-visible,
+    input:focus-visible {
+      outline: 3px solid var(--warning);
+      outline-offset: 3px;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .card {
+      border-left: 5px solid var(--warning);
+    }
+
+    .card[data-status="COMMITTED"] {
+      border-left-color: var(--success);
+    }
+
+    .card[data-status="REJECTED"],
+    .card[data-status="FAILED"] {
+      border-left-color: var(--danger);
+    }
+
+    .card[data-status="EXPIRED"] {
+      border-left-color: #a4aec2;
+    }
+
+    .request-id {
+      overflow-wrap: anywhere;
+      font-family: monospace;
+      color: var(--muted);
+    }
+
+    pre {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 16px;
+      border-radius: 8px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font-size: 13px;
+    }
+
+    .clock {
+      color: var(--warning);
+    }
+
+    #message {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      color: var(--warning);
+      min-height: 24px;
+    }
+
+    .empty {
+      padding: 24px;
+      color: var(--muted);
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+    }
+
+    @media (max-width: 540px) {
+      .panel,
+      .card {
+        padding: 18px;
+      }
+
+      .actions button {
+        width: 100%;
+      }
+    }
+  </style>
 </head>
+
 <body>
 <main>
-<h1>🛡 MCP-Guardrail</h1>
-<p>Review staged sandbox operations before execution.</p>
-<section id="landing">
-<h2>Protected test console</h2>
-<p>This console matches the example backend's administrator API. It is not public signup or Supabase login.</p>
-<button id="open">Open test console</button>
-</section>
-<section id="connection" hidden>
-<h2>Connect administrator session</h2>
-<p class="muted">For your own testing only. Never give a production administrator key to portfolio visitors. The key stays in this page's memory; it is not saved in browser storage.</p>
-<form id="connectForm">
-<label for="api">Backend HTTPS base URL</label>
-<input id="api" type="url" value="https://mcp-guardrail-backend.onrender.com" required>
-<label for="secret">Sandbox administrator API key</label>
-<input id="secret" type="password" autocomplete="off" required>
-<button type="submit">Connect</button>
-</form>
-</section>
-<section id="console" hidden>
-<h2>Pending requests and outcomes</h2>
-<p id="session" class="muted"></p>
-<div class="actions"><button id="refresh">Refresh</button><button id="disconnect">Disconnect</button></div>
-<p>No action executes automatically when approval expires. Submit new requests through your connected MCP client.</p>
-<div id="cards"></div>
-</section>
-<p id="message" role="status" aria-live="polite"></p>
+  <header>
+    <div>
+      <h1>🛡 MCP-Guardrail</h1>
+      <p class="muted">Review AI-requested changes before execution.</p>
+    </div>
+    <span class="badge" id="connectionBadge">Disconnected</span>
+  </header>
+
+  <section id="landing" class="panel hero">
+    <h2>Human approval for high-risk operations</h2>
+    <p>
+      Inspect pending sandbox requests, approve or reject them,
+      and review the backend-reported outcome.
+    </p>
+
+    <div class="notice">
+      Administrator testing console. This page is not public signup,
+      Supabase user login, or a production certification.
+    </div>
+
+    <button id="openConsole" type="button">
+      Open Sandbox Test Console
+    </button>
+  </section>
+
+  <section id="connectionPanel" class="panel" hidden>
+    <h2>Connect administrator session</h2>
+
+    <p class="muted">
+      Use your own disposable sandbox environment.
+      The key stays in this page's memory and is not saved in browser storage.
+      Do not give production administrator credentials to visitors.
+    </p>
+
+    <form id="connectForm">
+      <label for="backendUrl">Backend HTTPS base URL</label>
+      <input
+        id="backendUrl"
+        type="url"
+        value="https://mcp-guardrail-backend.onrender.com"
+        placeholder="https://your-service.onrender.com"
+        required
+      >
+
+      <label for="adminKey">Sandbox administrator API key</label>
+      <input
+        id="adminKey"
+        type="password"
+        autocomplete="off"
+        placeholder="Enter your sandbox ADMIN_API_KEY"
+        required
+      >
+
+      <div class="actions">
+        <button id="connectButton" type="submit">Connect</button>
+        <button id="backButton" type="button" class="secondary">
+          Back
+        </button>
+      </div>
+    </form>
+  </section>
+
+  <section id="consolePanel" hidden>
+    <div class="panel">
+      <h2>Pending requests and outcomes</h2>
+      <p id="syncStatus" class="muted">Not synchronized yet.</p>
+
+      <div class="actions">
+        <button id="refreshButton" type="button">Refresh</button>
+        <button id="disconnectButton" type="button" class="secondary">
+          Disconnect
+        </button>
+      </div>
+
+      <div class="notice">
+        No action executes automatically when approval expires.
+        Submit requests through your connected MCP client, then refresh here.
+      </div>
+
+      <p class="muted">
+        This view displays the records returned by the backend.
+        It is not a cryptographic audit-chain verifier.
+      </p>
+    </div>
+
+    <div id="cards"></div>
+  </section>
+
+  <p id="message" role="status" aria-live="polite"></p>
 </main>
+
 <script type="module">
-const $ = id => document.getElementById(id);
-let base = '', key = '', rows = [], serverOffset = 0, busy = false;
-function node(tag, text, className) {
-  const element = document.createElement(tag);
-  if (text !== undefined) element.textContent = text;
-  if (className) element.className = className;
-  return element;
-}
-function message(text) { $('message').textContent = text; }
-$('open').addEventListener('click', () => {
-  $('landing').hidden = true;
-  $('connection').hidden = false;
-  $('secret').focus();
-});
-async function api(path, options = {}) {
-  const response = await fetch(base + path, {
-    ...options,
-    headers: {
-      ...options.headers,
-      Authorization: `Bearer ${key}`
-    },
-    cache: 'no-store',
-    signal: AbortSignal.timeout(20000)
-  });
-  const data = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(data?.error || `HTTP ${response.status}`);
-  if (!data) throw new Error('Expected a JSON response.');
-  return data;
-}
-function remaining(tx) {
-  const deadline = Date.parse(tx.expiresAt);
-  if (!Number.isFinite(deadline)) return null;
-  return Math.max(0, Math.ceil((deadline - (Date.now() + serverOffset)) / 1000));
-}
-function updateClocks() {
-  for (const tx of rows) {
-    const clock = document.getElementById(`clock-${tx.id}`);
-    if (!clock || tx.status !== 'PENDING') continue;
-    const seconds = remaining(tx);
-    clock.textContent = seconds === null ? 'Expiry unavailable; approval disabled.'
-      : seconds > 0 ? `Approval expires in ${seconds}s.`
-      : 'Approval window elapsed; refresh for backend status.';
-    if (seconds === null || seconds === 0) {
-      const card = document.getElementById(`tx-${tx.id}`);
-      card?.querySelectorAll('button').forEach(button => { button.disabled = true; });
+  const $ = id => document.getElementById(id);
+
+  let apiBase = "";
+  let adminKey = "";
+  let transactions = [];
+  let serverOffset = 0;
+  let busy = false;
+  let connected = false;
+  let stateFresh = false;
+
+  function makeElement(tag, text, className) {
+    const element = document.createElement(tag);
+
+    if (text !== undefined) {
+      element.textContent = String(text);
     }
-  }
-}
-function render() {
-  $('cards').replaceChildren();
-  if (!rows.length) {
-    $('cards').append(node('p', 'No requests yet. Ask Claude to stage a disposable task deletion.'));
-    return;
-  }
-  for (const tx of rows) {
-    const card = node('article');
-    card.id = `tx-${tx.id}`;
-    card.append(node('h2', tx.operation || 'Operation'));
-    card.append(node('p', `Request ID: ${tx.id}`));
-    card.append(node('p', `Backend status: ${tx.status}`));
-    card.append(node('pre', JSON.stringify({
-      target: tx.target,
-      title: tx.targetTitle,
-      requester: tx.requester,
-      createdAt: tx.createdAt,
-      expiresAt: tx.expiresAt
-    }, null, 2)));
-    if (tx.status === 'PENDING') {
-      const clock = node('p'); clock.id = `clock-${tx.id}`;
-      card.append(clock);
-      const actions = node('div', undefined, 'actions');
-      for (const [action, label] of [['APPROVE', 'Approve deletion'], ['ABORT', 'Reject request']]) {
-        const button = node('button', label, action === 'ABORT' ? 'reject' : '');
-        button.disabled = busy;
-        button.addEventListener('click', () => decide(tx, action));
-        actions.append(button);
-      }
-      card.append(actions);
+
+    if (className) {
+      element.className = className;
     }
-    $('cards').append(card);
+
+    return element;
   }
-  updateClocks();
-}
-async function refresh() {
-  const data = await api('/api/ledger');
-  if (!Array.isArray(data.transactions) || !Number.isFinite(Date.parse(data.serverTime))) {
-    throw new Error('Unexpected ledger schema. Expected {serverTime, transactions}.');
+
+  function showMessage(text) {
+    $("message").textContent = text;
   }
-  rows = data.transactions;
-  serverOffset = Date.parse(data.serverTime) - Date.now();
-  render();
-  $('session').textContent = `Last successful sync: ${new Date().toLocaleTimeString()}`;
-}
-async function decide(tx, action) {
-  if (busy) return;
-  if (action === 'APPROVE' && !confirm(`Approve deletion of ${tx.targetTitle || tx.target}?`)) return;
-  busy = true; render(); message('Submitting decision. No outcome confirmed yet.');
-  try {
-    const result = await api('/api/override', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({txId: tx.id, action})
+
+  function updateControls() {
+    $("connectButton").disabled = busy;
+    $("backButton").disabled = busy;
+    $("refreshButton").disabled = busy;
+    $("disconnectButton").disabled = busy;
+  }
+
+  function setBusy(value) {
+    busy = value;
+    updateControls();
+    renderCards();
+  }
+
+  function remainingSeconds(transaction) {
+    const expiry = Date.parse(transaction.expiresAt);
+
+    if (!Number.isFinite(expiry)) {
+      return null;
+    }
+
+    return Math.max(
+      0,
+      Math.ceil((expiry - (Date.now() + serverOffset)) / 1000)
+    );
+  }
+
+  function validateTransaction(transaction) {
+    return (
+      transaction &&
+      typeof transaction.id === "string" &&
+      typeof transaction.status === "string" &&
+      typeof transaction.operation === "string"
+    );
+  }
+
+  async function requestApi(path, options = {}) {
+    const response = await fetch(apiBase + path, {
+      ...options,
+      headers: {
+        ...options.headers,
+        Authorization: `Bearer ${adminKey}`
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(30000)
     });
-    if (!result.transaction || result.transaction.id !== tx.id) {
-      throw new Error('Unexpected response; outcome requires verification.');
+
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error(
+          "Unauthorized. Check your sandbox administrator key."
+        );
+      }
+
+      throw new Error(
+        data?.error || `Backend returned HTTP ${response.status}.`
+      );
     }
-    message(`Backend reported: ${result.transaction.status}.`);
-  } catch (error) {
-    message(`Decision not confirmed: ${error.message}. Checking backend state; do not blindly retry.`);
-  } finally {
-    try { await refresh(); }
-    catch (error) { message(`Unable to verify current outcome: ${error.message}. Reconnect or refresh before retrying.`); }
-    busy = false; render();
+
+    if (!data) {
+      throw new Error("Backend did not return valid JSON.");
+    }
+
+    return data;
   }
-}
-$('connectForm').addEventListener('submit', async event => {
-  event.preventDefault();
-  try {
-    const url = new URL($('api').value);
-    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
-      throw new Error('Enter only an HTTPS backend origin, without a path or credentials.');
+
+  function renderCards() {
+    const root = $("cards");
+    root.replaceChildren();
+
+    if (!transactions.length) {
+      root.append(
+        makeElement(
+          "p",
+          "No requests returned. Ask Claude to stage a sandbox operation, then refresh.",
+          "empty"
+        )
+      );
+      return;
     }
-    if (!confirm(`Send the sandbox key to ${url.origin}? Verify this is your own server.`)) return;
-    base = url.origin; key = $('secret').value; $('secret').value = '';
-    message('Connecting; a sleeping service may require a later retry.');
-    await refresh();
-    $('connection').hidden = true; $('console').hidden = false;
-    message('Administrator API accepted the request. This is not user JWT verification.');
-  } catch (error) { key = ''; message(error.message); }
-});
-$('refresh').addEventListener('click', async () => {
-  if (busy) return;
-  try { await refresh(); message('Backend state refreshed.'); }
-  catch (error) { message(`Refresh failed: ${error.message}. Displayed records may be stale.`); }
-});
-$('disconnect').addEventListener('click', () => {
-  if (busy) return;
-  key = ''; rows = []; $('cards').replaceChildren();
-  $('console').hidden = true; $('connection').hidden = false;
-  message('Disconnected. Refreshing or closing the page also clears the in-memory key.');
-});
-setInterval(updateClocks, 1000);
+
+    for (const transaction of transactions) {
+      const card = makeElement("article", undefined, "card");
+      card.dataset.status = transaction.status;
+
+      card.append(
+        makeElement("h2", transaction.operation),
+        makeElement(
+          "p",
+          `Request ID: ${transaction.id}`,
+          "request-id"
+        ),
+        makeElement(
+          "p",
+          `Backend status: ${transaction.status}`
+        )
+      );
+
+      card.append(
+        makeElement(
+          "pre",
+          JSON.stringify({
+            target: transaction.target,
+            title: transaction.targetTitle,
+            requester: transaction.requester,
+            createdAt: transaction.createdAt,
+            expiresAt: transaction.expiresAt
+          }, null, 2)
+        )
+      );
+
+      if (transaction.status === "PENDING") {
+        const clock = makeElement("p", "", "clock");
+        clock.dataset.requestId = transaction.id;
+        card.append(clock);
+
+        const actions = makeElement("div", undefined, "actions");
+
+        for (const [action, label] of [
+          ["APPROVE", "Review and Approve Deletion"],
+          ["ABORT", "Reject Request"]
+        ]) {
+          const button = makeElement(
+            "button",
+            label,
+            action === "ABORT" ? "reject" : ""
+          );
+
+          button.type = "button";
+          button.disabled = busy || !stateFresh;
+
+          button.addEventListener("click", () => {
+            void submitDecision(transaction, action);
+          });
+
+          actions.append(button);
+        }
+
+        card.append(actions);
+      }
+
+      root.append(card);
+    }
+
+    updateClocks();
+  }
+
+  function updateClocks() {
+    const byId = new Map(
+      transactions.map(transaction => [
+        transaction.id,
+        transaction
+      ])
+    );
+
+    for (const clock of $("cards").querySelectorAll(".clock")) {
+      const transaction = byId.get(clock.dataset.requestId);
+
+      if (!transaction) {
+        continue;
+      }
+
+      const seconds = remainingSeconds(transaction);
+
+      if (!stateFresh) {
+        clock.textContent =
+          "State may be stale. Refresh successfully before acting.";
+      } else if (seconds === null) {
+        clock.textContent =
+          "Invalid expiry. Approval is disabled.";
+      } else if (seconds === 0) {
+        clock.textContent =
+          "Approval window elapsed. Refresh for backend status.";
+      } else {
+        clock.textContent =
+          `Approval expires in ${seconds}s. No automatic execution.`;
+      }
+
+      const card = clock.closest("article");
+
+      for (const button of card.querySelectorAll("button")) {
+        button.disabled =
+          busy ||
+          !stateFresh ||
+          seconds === null ||
+          seconds === 0;
+      }
+    }
+  }
+
+  async function refreshTransactions() {
+    try {
+      const data = await requestApi("/api/ledger");
+
+      if (
+        !Array.isArray(data.transactions) ||
+        !data.transactions.every(validateTransaction) ||
+        !Number.isFinite(Date.parse(data.serverTime))
+      ) {
+        throw new Error(
+          "Unexpected ledger response. Expected serverTime and transactions."
+        );
+      }
+
+      transactions = data.transactions;
+      serverOffset = Date.parse(data.serverTime) - Date.now();
+      stateFresh = true;
+
+      $("syncStatus").textContent =
+        `Last successful sync: ${new Date().toLocaleTimeString()}`;
+
+      renderCards();
+    } catch (error) {
+      stateFresh = false;
+
+      $("syncStatus").textContent =
+        "Sync failed. Displayed records may be stale.";
+
+      renderCards();
+      throw error;
+    }
+  }
+
+  async function submitDecision(transaction, action) {
+    if (busy || !connected || !stateFresh) {
+      return;
+    }
+
+    const seconds = remainingSeconds(transaction);
+
+    if (seconds === null || seconds === 0) {
+      showMessage("Approval window is unavailable or elapsed. Refresh first.");
+      return;
+    }
+
+    if (action === "APPROVE") {
+      const confirmed = window.confirm(
+        `Approve deletion of:\n\n` +
+        `${transaction.targetTitle || transaction.target}\n\n` +
+        `Target ID: ${transaction.target}\n` +
+        `Request ID: ${transaction.id}\n\n` +
+        `Proceed only if this is disposable sandbox data.`
+      );
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    setBusy(true);
+    showMessage("Submitting decision. Outcome not confirmed yet.");
+
+    let outcomeMessage = "";
+
+    try {
+      const result = await requestApi("/api/override", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          txId: transaction.id,
+          action
+        })
+      });
+
+      if (
+        !validateTransaction(result.transaction) ||
+        result.transaction.id !== transaction.id
+      ) {
+        throw new Error(
+          "Unexpected response. The execution outcome needs verification."
+        );
+      }
+
+      outcomeMessage =
+        `Backend reported: ${result.transaction.status}.`;
+    } catch (error) {
+      outcomeMessage =
+        `Decision not confirmed: ${error.message}\n` +
+        "Do not blindly retry. Checking the current backend state.";
+    }
+
+    try {
+      await refreshTransactions();
+
+      const current = transactions.find(
+        row => row.id === transaction.id
+      );
+
+      if (current) {
+        outcomeMessage +=
+          `\nLatest synchronized status: ${current.status}.`;
+      } else {
+        outcomeMessage +=
+          "\nRequest is not in the returned ledger; verify its status through MCP.";
+      }
+    } catch (error) {
+      outcomeMessage +=
+        `\nRefresh failed: ${error.message}\n` +
+        "Actions are disabled until a successful refresh.";
+    } finally {
+      setBusy(false);
+      showMessage(outcomeMessage);
+    }
+  }
+
+  $("openConsole").addEventListener("click", () => {
+    $("landing").hidden = true;
+    $("connectionPanel").hidden = false;
+    $("adminKey").focus();
+    showMessage("");
+  });
+
+  $("backButton").addEventListener("click", () => {
+    if (busy) return;
+
+    $("adminKey").value = "";
+    $("connectionPanel").hidden = true;
+    $("landing").hidden = false;
+    showMessage("");
+  });
+
+  $("connectForm").addEventListener("submit", async event => {
+    event.preventDefault();
+
+    if (busy) return;
+
+    try {
+      const url = new URL($("backendUrl").value.trim());
+
+      if (
+        url.protocol !== "https:" ||
+        url.username ||
+        url.password ||
+        url.search ||
+        url.hash ||
+        url.pathname !== "/"
+      ) {
+        throw new Error(
+          "Enter only the HTTPS backend base URL, without an API path."
+        );
+      }
+
+      const enteredKey = $("adminKey").value;
+
+      if (!enteredKey) {
+        throw new Error("Enter your sandbox administrator key.");
+      }
+
+      if (!window.confirm(
+        `Send the sandbox key to ${url.origin}?\n\n` +
+        "Continue only if this is your own trusted backend."
+      )) {
+        return;
+      }
+
+      apiBase = url.origin;
+      adminKey = enteredKey;
+      $("adminKey").value = "";
+
+      setBusy(true);
+      showMessage("Connecting to backend…");
+
+      await refreshTransactions();
+
+      connected = true;
+      $("connectionBadge").textContent = "Admin API connected";
+      $("connectionPanel").hidden = true;
+      $("consolePanel").hidden = false;
+
+      showMessage(
+        "Connected to the administrator API. " +
+        "This is not Supabase user login."
+      );
+    } catch (error) {
+      connected = false;
+      stateFresh = false;
+      adminKey = "";
+      transactions = [];
+
+      $("connectionBadge").textContent = "Disconnected";
+      renderCards();
+
+      showMessage(
+        `Connection failed: ${error.message}\n` +
+        "For 'Failed to fetch', inspect the browser Console for CORS or network errors."
+      );
+    } finally {
+      setBusy(false);
+    }
+  });
+
+  $("refreshButton").addEventListener("click", async () => {
+    if (busy || !connected) return;
+
+    setBusy(true);
+    showMessage("Refreshing backend state…");
+
+    try {
+      await refreshTransactions();
+      showMessage("Backend state refreshed.");
+    } catch (error) {
+      showMessage(
+        `Refresh failed: ${error.message}\n` +
+        "Actions remain disabled until synchronization succeeds."
+      );
+    } finally {
+      setBusy(false);
+    }
+  });
+
+  $("disconnectButton").addEventListener("click", () => {
+    if (busy) return;
+
+    adminKey = "";
+    apiBase = "";
+    transactions = [];
+    connected = false;
+    stateFresh = false;
+
+    $("adminKey").value = "";
+    $("cards").replaceChildren();
+    $("connectionBadge").textContent = "Disconnected";
+    $("consolePanel").hidden = true;
+    $("connectionPanel").hidden = false;
+
+    showMessage("Disconnected. In-memory credentials cleared.");
+  });
+
+  setInterval(updateClocks, 1000);
 </script>
 </body>
 </html>
