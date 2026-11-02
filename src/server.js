@@ -225,7 +225,6 @@ app.get("/api/ledger", requireAdmin, asyncRoute(async (_req, res) => {
   });
 }));
 
-// Fixed & Hardened: Hooks natively into your high-performance PostgreSQL RPC function for true atomic transaction execution
 app.post("/api/override", requireAdmin, asyncRoute(async (req, res) => {
   const parsed = z.object({
     txId: z.string().uuid(),
@@ -238,7 +237,6 @@ app.post("/api/override", requireAdmin, asyncRoute(async (req, res) => {
 
   const { txId, action } = parsed.data;
 
-  // Calls your newly deployed public database stored procedure
   const resultRPC = await queryDatabase("/rpc/guardrail_finalize_request", "POST", {
     p_request_id: txId,
     p_action: action
@@ -255,15 +253,14 @@ app.post("/api/override", requireAdmin, asyncRoute(async (req, res) => {
     transaction: {
       id: tx.id,
       operation: tx.operation,
-Use code with caution.
-target: tx.target,
-targetTitle: tx.target_title,
-requester: tx.requester,
-status: tx.status,
-createdAt: tx.created_at,
-expiresAt: tx.expires_at
-}
-});
+      target: tx.target,
+      targetTitle: tx.target_title,
+      requester: tx.requester,
+      status: tx.status,
+      createdAt: tx.created_at,
+      expiresAt: tx.expires_at
+    }
+  });
 }));
 app.get("/healthz", (_req, res) => res.json({ status: "ok" }));
 app.get("/", (_req, res) => res.json({ persistent: true }));
