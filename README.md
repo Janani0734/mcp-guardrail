@@ -1,39 +1,87 @@
-# MCP-Guardrail Enterprise Suite 🛡️
+# 🛡 MCP-Guardrail
 
-A production-grade, zero-trust security proxy firewall middleware layer designed for the Model Context Protocol (MCP).
+**Approve AI agent actions before they execute.**
 
-## 🌐 Live Systems Framework
-* **Live Operations Control Panel UI:** https://janani0734.github.io/mcp-guardrail/
-* **24/7 Cloud Telemetry Backend Engine:** Deployed on Render Node Container Environment
+MCP-Guardrail is a human-in-the-loop safety layer for AI agents using the
+Model Context Protocol (MCP). Instead of letting an AI agent immediately
+perform a risky action, it converts the request into an expiring approval
+request. A human reviews it in a dashboard and approves or rejects it.
 
-## 📈 Market Context & core Problem Space
-With the massive 970x explosion in Model Context Protocol adoption scaling rapidly from 1 lakh downloads/month in late 2024 to 9.6 crores/month by early 2026, enterprises are swiftly wiring autonomous AI clients (Cursor, Claude Code, custom agents) directly to core corporate database clusters. However, granting models raw, unfettered permission layers creates catastrophic vectors for indirect prompt injections or accidental recursive batch mutations. 
+## Verified MVP result
 
-`mcp-guardrail` blocks this security loophole by introducing a high-performance proxy gateway that intercepts data mutation attempts out-of-band and enforces an absolute Human-in-the-Loop gateway before queries can resolve.
+This project has been tested end-to-end with Claude and Supabase:
 
-## 🛠️ Key Architectural Protective Layers
+- An AI agent requested deletion of a sandbox task.
+- The request appeared as `PENDING` in the admin dashboard.
+- An approved deletion request removed only the approved target task.
+- A rejected deletion request preserved the target task.
+- An expired request did not execute any deletion.
 
-### 1. Time-Collateralized Staging Queue Manager ⏱️
-* **Implementation Path:** `src/security/staging.js`
-* **Mechanism:** Intercepts high-risk destructive structural intents (`WIPE_LOGS`, `DELETE`, `DROP`). It shifts the context payload execution into an isolated internal memory array queue and activates a 30-second rollback clock window, exposing unique transaction signature tokens (`tx_xxxxxx`) to allow manual administrative override cancellations.
+## How it works
 
-### 2. Cryptographic Compliance Audit Trail Ledger 🔐
-* **Implementation Path:** `src/security/ledger.js`
-* **Mechanism:** Guarantees absolute, non-falsifiable historical auditing trail tracking by generating a mathematical SHA-256 signature string pairing the model's query plan directly to the specific timestamped human approval event metadata.
+```text
+Claude / MCP client
+        |
+        | request_delete_task
+        v
+MCP-Guardrail backend
+        |
+        | Creates PENDING approval request
+        v
+Supabase PostgreSQL
+        |
+        | Admin dashboard reads request
+        v
+Human approves or rejects
+        |
+        | Atomic database RPC
+        v
+Task deleted OR preserved
+```
 
-### 3. Semantic Canary Honeypot Boundary Verification 🪤
-* **Implementation Path:** `src/security/canary.js`
-* **Mechanism:** Injects hidden, deterministic parameter verification elements inside query schemas to instantly flag structural alterations caused by indirect adversarial context injections before data blocks execute against production nodes.
+## Features
 
-## ⚙️ Local Development Quickstart Guide
+- MCP tool integration
+- Expiring approval requests
+- Human approval dashboard
+- Approve and reject actions
+- Persistent PostgreSQL state
+- Atomic finalization through a Supabase RPC function
+- Admin API authentication
+- CORS-restricted frontend access
 
-1. Clone the project folder directly to your workstation layout.
-2. Inject your production database tracking keys cleanly into your current terminal memory space session:
-   ```cmd
-   set SUPABASE_URL=https://supabase.co
-   set SUPABASE_ANON_KEY=your-anon-public-key-string
-   ```
-3. Boot up the high-performance local security proxy layer loop:
-   ```cmd
-   node src/server.js
-   ```
+## Tech stack
+
+- Node.js
+- Express
+- Model Context Protocol SDK
+- Supabase PostgreSQL
+- Render
+- GitHub Pages
+
+## Live demo
+
+- Frontend dashboard: https://janani0734.github.io/mcp-guardrail/
+- Backend health check: https://mcp-guardrail-backend.onrender.com/healthz
+
+## Security model
+
+Secrets are never committed to this repository.
+
+The following values are stored only in Render environment variables:
+
+```text
+ADMIN_API_KEY
+SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY
+FRONTEND_ORIGIN
+```
+
+The repository includes an `.env.example` file showing the required variable
+names, but it does not contain real credentials.
+
+## Important note
+
+This is an early developer preview, not a certified enterprise security
+product. Do not connect production databases, payment systems, cloud
+credentials, or customer data without additional security review.
