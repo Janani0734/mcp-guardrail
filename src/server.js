@@ -4,6 +4,10 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import {
+  S3Client,
+  PutObjectCommand
+} from "@aws-sdk/client-s3";
 
 const app = express();
 const PORT = Number(process.env.PORT || 10000);
@@ -14,6 +18,11 @@ const FRONTEND_ORIGIN =
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
+const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
+const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
+const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
 
 if (!ADMIN_API_KEY || ADMIN_API_KEY.length < 32) {
   throw new Error(
@@ -32,6 +41,24 @@ const databaseBase = new URL(SUPABASE_URL);
 if (databaseBase.protocol !== "https:") {
   throw new Error("SUPABASE_URL must use HTTPS.");
 }
+
+const externalAnchoringEnabled = Boolean(
+  R2_ACCOUNT_ID &&
+  R2_ACCESS_KEY_ID &&
+  R2_SECRET_ACCESS_KEY &&
+  R2_BUCKET_NAME
+);
+
+const r2Client = externalAnchoringEnabled
+  ? new S3Client({
+      region: "auto",
+      endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: R2_ACCESS_KEY_ID,
+        secretAccessKey: R2_SECRET_ACCESS_KEY
+      }
+    })
+  : null;
 
 app.disable("x-powered-by");
 
@@ -186,6 +213,102 @@ async function expireRequestIfNeeded(request) {
   return latest[0];
 }
 
+async function appendAuditEvent(
+  requestId,
+  eventType,
+  actor,
+  outcome,
+  eventPayload = {}
+) {
+  return queryDatabase(
+    "/rpc/audit_append_event",
+    "POST",
+    {
+      p_request_id: requestId,
+      p_event_type: eventType,
+      p_actor: actor,
+      p_outcome: outcome,
+      p_event_payload: eventPayload
+    }
+  );
+}
+
+async function anchorAuditChain() {
+  if (!externalAnchoringEnabled) {
+    return {
+      anchored: false,
+      reason:
+        "External anchoring is not configured. " +
+        "Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, " +
+        "R2_SECRET_ACCESS_KEY, and R2_BUCKET_NAME."
+    };
+  }
+
+  const headResult = await queryDatabase(
+    "/rpc/audit_get_chain_head",
+    "POST",
+    {}
+  );
+
+  const head = Array.isArray(headResult)
+    ? headResult[0]
+    : headResult;
+
+  if (!head?.chain_head_hash || !head?.last_event_id) {
+    throw new Error(
+      "Audit chain is empty or returned an invalid head."
+    );
+  }
+
+  const anchoredAt = new Date().toISOString();
+  const objectKey =
+    `anchors/${head.last_event_id}-${Date.now()}.json`;
+
+  const checkpoint = {
+    schema: "mcp-guardrail-audit-anchor-v1",
+    anchoredAt,
+    lastEventId: head.last_event_id,
+    chainHeadHash: head.chain_head_hash,
+    eventCount: head.event_count,
+    provider: "cloudflare-r2"
+  };
+
+  await r2Client.send(
+    new PutObjectCommand({
+      Bucket: R2_BUCKET_NAME,
+      Key: objectKey,
+      Body: JSON.stringify(checkpoint, null, 2),
+      ContentType: "application/json",
+      Metadata: {
+        "chain-head-hash": head.chain_head_hash,
+        "last-event-id": String(head.last_event_id)
+      }
+    })
+  );
+
+  await queryDatabase(
+    "/audit_chain_anchors",
+    "POST",
+    {
+      anchored_at: anchoredAt,
+      last_event_id: head.last_event_id,
+      chain_head_hash: head.chain_head_hash,
+      anchor_provider: "cloudflare-r2",
+      external_reference: objectKey,
+      anchor_status: "ANCHORED"
+    }
+  );
+
+  return {
+    anchored: true,
+    objectKey,
+    lastEventId: head.last_event_id,
+    chainHeadHash: head.chain_head_hash,
+    eventCount: head.event_count,
+    anchoredAt
+  };
+}
+
 function textResult(value, isError = false) {
   return {
     content: [
@@ -250,7 +373,10 @@ function createMcpServer() {
         "GET"
       );
 
-      if (Array.isArray(activeRequests) && activeRequests.length > 0) {
+      if (
+        Array.isArray(activeRequests) &&
+        activeRequests.length > 0
+      ) {
         const existingRequest =
           await expireRequestIfNeeded(activeRequests[0]);
 
@@ -278,6 +404,19 @@ function createMcpServer() {
         "/approval_requests",
         "POST",
         newRequest
+      );
+
+      await appendAuditEvent(
+        newRequest.id,
+        "REQUEST_CREATED",
+        "mcp-client",
+        "PENDING",
+        {
+          operation: newRequest.operation,
+          target: newRequest.target,
+          targetTitle: newRequest.target_title,
+          expiresAt: newRequest.expires_at
+        }
       );
 
       return textResult({
@@ -477,6 +616,19 @@ app.post(
       expiresAt: transaction.expires_at
     };
 
+    await appendAuditEvent(
+      transaction.id,
+      "ADMIN_DECISION",
+      "dashboard-admin",
+      transaction.status,
+      {
+        requestedAction: action,
+        operation: transaction.operation,
+        target: transaction.target,
+        targetTitle: transaction.target_title
+      }
+    );
+
     if (transaction.status === "EXPIRED") {
       return res.status(410).json({
         success: false,
@@ -490,6 +642,73 @@ app.post(
         transaction.status === "COMMITTED" ||
         transaction.status === "REJECTED",
       transaction: responseTransaction
+    });
+  })
+);
+
+app.get(
+  "/api/audit",
+  requireAdmin,
+  asyncRoute(async (_req, res) => {
+    const events = await queryDatabase(
+      "/audit_events?select=*&order=id.asc",
+      "GET"
+    );
+
+    const verification = await queryDatabase(
+      "/rpc/audit_verify_chain",
+      "POST",
+      {}
+    );
+
+    const result = Array.isArray(verification)
+      ? verification[0]
+      : verification;
+
+    res.setHeader("Cache-Control", "no-store");
+
+    res.json({
+      verified: result?.verified === true,
+      checkedEvents: result?.checked_events ?? 0,
+      firstBrokenEvent: result?.first_broken_event ?? null,
+      message:
+        result?.message ?? "Verification result unavailable.",
+      events
+    });
+  })
+);
+
+app.post(
+  "/api/audit/anchor",
+  requireAdmin,
+  asyncRoute(async (_req, res) => {
+    const result = await anchorAuditChain();
+
+    res.setHeader("Cache-Control", "no-store");
+
+    res.json({
+      success: result.anchored,
+      ...result
+    });
+  })
+);
+
+app.get(
+  "/api/audit/anchor/latest",
+  requireAdmin,
+  asyncRoute(async (_req, res) => {
+    const anchors = await queryDatabase(
+      "/audit_chain_anchors?select=*&order=id.desc&limit=1",
+      "GET"
+    );
+
+    const latest = Array.isArray(anchors) ? anchors[0] : null;
+
+    res.setHeader("Cache-Control", "no-store");
+
+    res.json({
+      anchored: Boolean(latest),
+      anchor: latest
     });
   })
 );
