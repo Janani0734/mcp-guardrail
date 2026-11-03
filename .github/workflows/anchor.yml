@@ -14,7 +14,7 @@ jobs:
         run: |
           echo Initiating background anchor connection to Render server...
           
-          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST https://mcp-guardrail-backend.onrender.com \
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST https://onrender.com \
             -H "Authorization: Bearer ${{ secrets.M_ADMIN_API_KEY }}" \
             -H "Content-Type: application/json")
 
