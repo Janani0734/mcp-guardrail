@@ -7,6 +7,15 @@ Model Context Protocol (MCP). Instead of letting an AI agent immediately
 perform a risky action, it converts the request into an expiring approval
 request. A human reviews it in a dashboard and approves or rejects it.
 
+## Dashboard preview
+
+![MCP-Guardrail approval dashboard](docs/dashboard.png)
+
+## Architecture
+
+![MCP-Guardrail architecture](docs/architecture.png)
+
+
 ## Verified MVP result
 
 This project has been tested end-to-end with Claude and Supabase:
