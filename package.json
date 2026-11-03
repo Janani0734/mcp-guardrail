@@ -4,17 +4,19 @@
   "type": "module",
   "main": "src/server.js",
   "scripts": {
-  "start": "node src/server.js",
-  "test:e2e": "playwright test",
-  "test:eval": "promptfoo eval",
-  "test:all": "npm run test:e2e && npm run test:eval"
+    "start": "node src/server.js",
+    "test:e2e": "playwright test",
+    "test:eval": "promptfoo eval",
+    "test:all": "npm run test:e2e && npm run test:eval"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.750.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "express": "^5.1.0",
-    "zod": "^3.23.8",
-    npm install -D @playwright/test promptfoo,
-    npx playwright install chromium
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "promptfoo": "^0.100.0"
   }
 }
