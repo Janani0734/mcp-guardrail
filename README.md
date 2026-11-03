@@ -13,8 +13,7 @@ request. A human reviews it in a dashboard and approves or rejects it.
 
 ## Architecture
 
-![MCP-Guardrail architecture](docs/architecture.png)
-
+![MCP-Guardrail architecture](architecture.png)
 
 ## Verified MVP result
 
