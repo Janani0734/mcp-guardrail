@@ -1,0 +1,43 @@
+name: Anchor MCP-Guardrail audit chain
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcp-guardrail-audit-anchor
+  cancel-in-progress: false
+
+jobs:
+  anchor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Anchor audit chain
+        env:
+          BACKEND_URL: "https://mcp-guardrail-backend.onrender.com"
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          response="$(
+            curl --fail --silent --show-error \
+              --request POST \
+              --url "$BACKEND_URL/api/audit/anchor" \
+              --header "Authorization: Bearer $ADMIN_API_KEY" \
+              --header "Content-Type: application/json"
+          )"
+
+          echo "$response"
+
+          anchored="$(printf '%s' "$response" | jq -r '.anchored // false')"
+
+          if [ "$anchored" != "true" ]; then
+            echo "External audit anchoring did not succeed."
+            exit 1
+          fi
+
+          echo "Audit chain anchored successfully."
