@@ -242,6 +242,16 @@
       margin-bottom: 8px;
     }
 
+    .audit-ok {
+      color: var(--success);
+      font-weight: 600;
+    }
+
+    .audit-fail {
+      color: var(--danger);
+      font-weight: 600;
+    }
+
     @media (max-width: 760px) {
       .hero-grid {
         grid-template-columns: 1fr;
@@ -282,7 +292,7 @@
 
         <p>
           MCP-Guardrail turns risky AI tool calls into expiring,
-          human-approved requests. Your AI can request an action but a
+          human-approved requests. Your AI can request an action—but a
           person decides whether it happens.
         </p>
 
@@ -334,7 +344,7 @@
         id="waitlistEmail"
         type="email"
         name="email"
-        placeholder="youremail@gmail.com"
+        placeholder="you@example.com"
         required
       >
 
@@ -397,6 +407,9 @@
     <div class="panel">
       <h2>Pending requests and outcomes</h2>
       <p id="syncStatus" class="muted">Not synchronized yet.</p>
+      <p id="auditStatus" class="muted">
+        Audit chain status: not checked.
+      </p>
 
       <div class="actions">
         <button id="refreshButton" type="button">Refresh</button>
@@ -411,8 +424,9 @@
       </div>
 
       <p class="muted">
-        This view displays records returned by the backend. It is not a
-        cryptographic audit-chain verifier.
+        This view displays records returned by the backend. Audit-chain
+        verification recomputes hashes but is not a substitute for
+        independent external anchoring.
       </p>
     </div>
 
@@ -665,6 +679,27 @@
     renderCards();
   }
 
+  async function refreshAuditStatus() {
+    const auditStatus = $("auditStatus");
+
+    try {
+      const auditResponse = await requestApi("/api/audit");
+      const verified = auditResponse.verified === true;
+
+      auditStatus.textContent = verified
+        ? `Audit chain verified: ${auditResponse.checkedEvents} events.`
+        : `Audit chain verification failed: ${auditResponse.message}`;
+
+      auditStatus.className = verified
+        ? "audit-ok"
+        : "audit-fail";
+    } catch (error) {
+      auditStatus.textContent =
+        `Audit chain status unavailable: ${error.message}`;
+      auditStatus.className = "audit-fail";
+    }
+  }
+
   async function submitDecision(transaction, action) {
     if (busy || !connected || !stateFresh) {
       return;
@@ -729,6 +764,7 @@
 
     try {
       await refreshTransactions();
+      await refreshAuditStatus();
 
       const current = transactions.find(
         row => row.id === transaction.id
@@ -769,7 +805,9 @@
       });
 
       if (!response.ok) {
-        throw new Error(`Form submission failed: HTTP ${response.status}`);
+        throw new Error(
+          `Form submission failed: HTTP ${response.status}`
+        );
       }
 
       form.reset();
@@ -841,6 +879,7 @@
       showMessage("Connecting to backend…");
 
       await refreshTransactions();
+      await refreshAuditStatus();
 
       connected = true;
       $("connectionBadge").textContent = "Admin API connected";
@@ -858,6 +897,9 @@
       transactions = [];
 
       $("connectionBadge").textContent = "Disconnected";
+      $("auditStatus").textContent =
+        "Audit chain status: not checked.";
+      $("auditStatus").className = "muted";
       renderCards();
 
       showMessage(
@@ -877,6 +919,7 @@
 
     try {
       await refreshTransactions();
+      await refreshAuditStatus();
       showMessage("Backend state refreshed.");
     } catch (error) {
       showMessage(
@@ -904,6 +947,9 @@
     $("connectionPanel").hidden = true;
     $("landing").hidden = false;
     $("waitlist").hidden = false;
+    $("auditStatus").textContent =
+      "Audit chain status: not checked.";
+    $("auditStatus").className = "muted";
 
     showMessage("Disconnected. In-memory credentials cleared.");
   });
