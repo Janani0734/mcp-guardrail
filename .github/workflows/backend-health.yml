@@ -1,0 +1,33 @@
+name: Check MCP-Guardrail backend health
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check backend health
+        run: |
+          set -euo pipefail
+
+          response="$(
+            curl --fail --silent --show-error \
+              --url https://mcp-guardrail-backend.onrender.com/healthz
+          )"
+
+          echo "$response"
+
+          status="$(printf '%s' "$response" | jq -r '.status // empty')"
+
+          if [ "$status" != "ok" ]; then
+            echo "Backend health check failed."
+            exit 1
+          fi
+
+          echo "Backend is healthy."
