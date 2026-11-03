@@ -1,27 +1,118 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require("@playwright/test");
 
-test.describe('MCP-Guardrail Admin Dashboard E2E Pipeline', () => {
-  test('should connect session, verify ledger state, and trigger audit check', async ({ page }) => {
-    // 1. Navigate to your deployed UI
-    await page.goto('https://github.io');
+const DASHBOARD_URL =
+  process.env.DASHBOARD_URL ||
+  "https://janani0734.github.io/mcp-guardrail/";
 
-    // 2. Validate core UI elements are visible before connecting
-    await expect(page.locator('text=Connect administrator session')).toBeVisible();
-    
-    // 3. Fill the Admin API Key input and click Connect
-    await page.fill('input[type="password"]', process.env.PLAYWRIGHT_ADMIN_KEY || 'mock_key');
-    await page.click('button:has-text("Connect")');
+const ADMIN_KEY = process.env.RENDER_ADMIN_API_KEY;
 
-    // 4. Assert the state changed to Connected
-    const statusBadge = page.locator('.status-badge'); // Update with your actual CSS class
-    await expect(statusBadge).toContainText('Connected');
+test.describe("MCP-Guardrail dashboard lifecycle", () => {
+  test("connects, refreshes ledger, and verifies audit status", async ({
+    page
+  }) => {
+    test.skip(
+      !ADMIN_KEY,
+      "RENDER_ADMIN_API_KEY secret is required for this test."
+    );
 
-    // 5. Verify the Audit Ledger Table populates rows
-    const ledgerTable = page.locator('table'); 
-    await expect(ledgerTable).toBeVisible();
+    await page.goto(DASHBOARD_URL);
 
-    // 6. Test the API Verification pipeline response UI mapping
-    await page.click('button:has-text("Verify Chain")');
-    await expect(page.locator('text=Audit chain verified successfully')).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /MCP-Guardrail/i })
+    ).toBeVisible();
+
+    await page
+      .getByRole("button", { name: "Open Sandbox Test Console" })
+      .click();
+
+    await expect(
+      page.getByRole("heading", {
+        name: "Connect administrator session"
+      })
+    ).toBeVisible();
+
+    await page
+      .getByLabel("Backend HTTPS base URL")
+      .fill("https://mcp-guardrail-backend.onrender.com");
+
+    await page
+      .getByLabel("Sandbox administrator API key")
+      .fill(ADMIN_KEY);
+
+    page.once("dialog", dialog => dialog.accept());
+
+    await page
+      .getByRole("button", { name: "Connect" })
+      .click();
+
+    await expect(
+      page.getByText("Admin API connected")
+    ).toBeVisible();
+
+    await expect(
+      page.getByText(/Last successful sync:/)
+    ).toBeVisible();
+
+    await page
+      .getByRole("button", { name: "Refresh" })
+      .click();
+
+    await expect(
+      page.getByText(/Audit chain verified:/)
+    ).toBeVisible();
+
+    await expect(
+      page.getByText(/Backend status:/)
+    ).toBeVisible();
+  });
+
+  test("rejects a pending deletion and preserves the task", async ({
+    page
+  }) => {
+    test.skip(
+      !ADMIN_KEY,
+      "RENDER_ADMIN_API_KEY secret is required for this test."
+    );
+
+    await page.goto(DASHBOARD_URL);
+
+    await page
+      .getByRole("button", { name: "Open Sandbox Test Console" })
+      .click();
+
+    await page
+      .getByLabel("Backend HTTPS base URL")
+      .fill("https://mcp-guardrail-backend.onrender.com");
+
+    await page
+      .getByLabel("Sandbox administrator API key")
+      .fill(ADMIN_KEY);
+
+    page.once("dialog", dialog => dialog.accept());
+
+    await page
+      .getByRole("button", { name: "Connect" })
+      .click();
+
+    await expect(
+      page.getByText("Admin API connected")
+    ).toBeVisible();
+
+    const pendingCard = page
+      .locator("article.card")
+      .filter({
+        hasText: "Backend status: PENDING"
+      })
+      .first();
+
+    await expect(pendingCard).toBeVisible();
+
+    await pendingCard
+      .getByRole("button", { name: "Reject Request" })
+      .click();
+
+    await expect(
+      page.getByText(/Backend reported: REJECTED/)
+    ).toBeVisible();
   });
 });
