@@ -3,7 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MCP-Guardrail | Sandbox Console</title>
+  <title>MCP-Guardrail | Approve AI agent actions before they execute</title>
+  <meta
+    name="description"
+    content="MCP-Guardrail turns risky AI tool calls into expiring, human-approved requests."
+  >
 
   <style>
     :root {
@@ -38,7 +42,7 @@
     main {
       max-width: 1050px;
       margin: auto;
-      padding: 28px 18px 60px;
+      padding: 28px 18px 70px;
     }
 
     header {
@@ -58,6 +62,12 @@
     }
 
     h2 {
+      margin-top: 0;
+      font-size: clamp(24px, 5vw, 36px);
+      line-height: 1.25;
+    }
+
+    h3 {
       margin-top: 0;
       font-size: 22px;
     }
@@ -83,16 +93,25 @@
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 14px;
-      padding: 24px;
+      padding: 26px;
       margin-bottom: 20px;
     }
 
     .hero {
-      padding: 38px 24px;
+      padding: 40px 26px;
     }
 
-    .hero h2 {
-      font-size: clamp(25px, 5vw, 36px);
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 28px;
+      align-items: start;
+    }
+
+    .subheading {
+      color: var(--primary);
+      font-weight: 650;
+      margin-top: 16px;
     }
 
     .notice {
@@ -107,6 +126,7 @@
     label {
       display: block;
       margin-top: 18px;
+      font-weight: 600;
     }
 
     input,
@@ -127,7 +147,7 @@
 
     button {
       border: 0;
-      padding: 11px 17px;
+      padding: 12px 18px;
       cursor: pointer;
       background: var(--primary);
       color: #171126;
@@ -213,6 +233,21 @@
       border-radius: 10px;
     }
 
+    .feature-list {
+      padding-left: 20px;
+      margin: 14px 0 0;
+    }
+
+    .feature-list li {
+      margin-bottom: 8px;
+    }
+
+    @media (max-width: 760px) {
+      .hero-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
     @media (max-width: 540px) {
       .panel,
       .card {
@@ -231,35 +266,103 @@
   <header>
     <div>
       <h1>🛡 MCP-Guardrail</h1>
-      <p class="muted">Review AI-requested changes before execution.</p>
+      <p class="muted">
+        A safety layer for dangerous AI tool calls.
+      </p>
     </div>
     <span class="badge" id="connectionBadge">Disconnected</span>
   </header>
 
   <section id="landing" class="panel hero">
-    <h2>Human approval for high-risk operations</h2>
+    <div class="hero-grid">
+      <div>
+        <h2>
+          Approve AI agent actions before they execute.
+        </h2>
+
+        <p>
+          MCP-Guardrail turns risky AI tool calls into expiring,
+          human-approved requests. Your AI can request an action—but a
+          person decides whether it happens.
+        </p>
+
+        <p class="subheading">
+          Your AI agent can ask. You decide.
+        </p>
+
+        <div class="actions">
+          <a href="#waitlist">
+            <button type="button">Join the waitlist</button>
+          </a>
+          <button id="openConsole" type="button" class="secondary">
+            Open Sandbox Test Console
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <h3>What it prevents</h3>
+
+        <ul class="feature-list">
+          <li>Unapproved file or database deletions</li>
+          <li>Automatic emails, payments, and cloud changes</li>
+          <li>Irreversible actions from autonomous agents</li>
+          <li>Missing approval history for AI decisions</li>
+        </ul>
+
+        <div class="notice">
+          Current release is a developer preview using disposable sandbox
+          data. It is not a certified enterprise security product.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="waitlist" class="panel">
+    <h2>Join the waitlist</h2>
     <p>
-      Inspect pending sandbox requests, approve or reject them,
-      and review the backend-reported outcome.
+      Be first to use MCP-Guardrail for safer AI agent automation.
     </p>
 
-    <div class="notice">
-      Administrator testing console. This page is not public signup,
-      Supabase user login, or a production certification.
-    </div>
+    <form
+      id="waitlistForm"
+      action="https://formspree.io/f/maeelzpw"
+      method="POST"
+    >
+      <label for="waitlistEmail">Email address</label>
+      <input
+        id="waitlistEmail"
+        type="email"
+        name="email"
+        placeholder="janani.ja07@gmail.com"
+        required
+      >
 
-    <button id="openConsole" type="button">
-      Open Sandbox Test Console
-    </button>
+      <label for="dangerousAction">
+        What dangerous AI actions do you want to approve?
+      </label>
+      <input
+        id="dangerousAction"
+        type="text"
+        name="dangerous_action"
+        placeholder="Deleting files, sending emails, payments, cloud changes…"
+      >
+
+      <div class="actions">
+        <button type="submit">Join waitlist</button>
+      </div>
+    </form>
+
+    <p id="waitlistMessage" class="muted" role="status"></p>
   </section>
 
   <section id="connectionPanel" class="panel" hidden>
     <h2>Connect administrator session</h2>
 
     <p class="muted">
-      Use your own disposable sandbox environment.
-      The key stays in this page's memory and is not saved in browser storage.
-      Do not give production administrator credentials to visitors.
+      Use your own disposable sandbox environment. The key stays in this
+      page's memory and is not saved in browser storage. Do not give
+      production administrator credentials to visitors.
     </p>
 
     <form id="connectForm">
@@ -303,13 +406,13 @@
       </div>
 
       <div class="notice">
-        No action executes automatically when approval expires.
-        Submit requests through your connected MCP client, then refresh here.
+        No action executes automatically when approval expires. Submit
+        requests through your connected MCP client, then refresh here.
       </div>
 
       <p class="muted">
-        This view displays the records returned by the backend.
-        It is not a cryptographic audit-chain verifier.
+        This view displays records returned by the backend. It is not a
+        cryptographic audit-chain verifier.
       </p>
     </div>
 
@@ -435,7 +538,7 @@
       card.dataset.status = transaction.status;
 
       card.append(
-        makeElement("h2", transaction.operation),
+        makeElement("h3", transaction.operation),
         makeElement(
           "p",
           `Request ID: ${transaction.id}`,
@@ -540,36 +643,26 @@
   }
 
   async function refreshTransactions() {
-    try {
-      const data = await requestApi("/api/ledger");
+    const data = await requestApi("/api/ledger");
 
-      if (
-        !Array.isArray(data.transactions) ||
-        !data.transactions.every(validateTransaction) ||
-        !Number.isFinite(Date.parse(data.serverTime))
-      ) {
-        throw new Error(
-          "Unexpected ledger response. Expected serverTime and transactions."
-        );
-      }
-
-      transactions = data.transactions;
-      serverOffset = Date.parse(data.serverTime) - Date.now();
-      stateFresh = true;
-
-      $("syncStatus").textContent =
-        `Last successful sync: ${new Date().toLocaleTimeString()}`;
-
-      renderCards();
-    } catch (error) {
-      stateFresh = false;
-
-      $("syncStatus").textContent =
-        "Sync failed. Displayed records may be stale.";
-
-      renderCards();
-      throw error;
+    if (
+      !Array.isArray(data.transactions) ||
+      !data.transactions.every(validateTransaction) ||
+      !Number.isFinite(Date.parse(data.serverTime))
+    ) {
+      throw new Error(
+        "Unexpected ledger response. Expected serverTime and transactions."
+      );
     }
+
+    transactions = data.transactions;
+    serverOffset = Date.parse(data.serverTime) - Date.now();
+    stateFresh = true;
+
+    $("syncStatus").textContent =
+      `Last successful sync: ${new Date().toLocaleTimeString()}`;
+
+    renderCards();
   }
 
   async function submitDecision(transaction, action) {
@@ -580,7 +673,9 @@
     const seconds = remainingSeconds(transaction);
 
     if (seconds === null || seconds === 0) {
-      showMessage("Approval window is unavailable or elapsed. Refresh first.");
+      showMessage(
+        "Approval window is unavailable or elapsed. Refresh first."
+      );
       return;
     }
 
@@ -656,8 +751,39 @@
     }
   }
 
+  $("waitlistForm").addEventListener("submit", async event => {
+    event.preventDefault();
+
+    const form = event.target;
+    const status = $("waitlistMessage");
+
+    status.textContent = "Submitting your request…";
+
+    try {
+      const response = await fetch(form.action, {
+        method: "POST",
+        body: new FormData(form),
+        headers: {
+          Accept: "application/json"
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Form submission failed: HTTP ${response.status}`);
+      }
+
+      form.reset();
+      status.textContent =
+        "Thanks! You are on the waitlist. We will contact you when early access opens.";
+    } catch (error) {
+      status.textContent =
+        `Could not submit right now: ${error.message}`;
+    }
+  });
+
   $("openConsole").addEventListener("click", () => {
     $("landing").hidden = true;
+    $("waitlist").hidden = true;
     $("connectionPanel").hidden = false;
     $("adminKey").focus();
     showMessage("");
@@ -669,6 +795,7 @@
     $("adminKey").value = "";
     $("connectionPanel").hidden = true;
     $("landing").hidden = false;
+    $("waitlist").hidden = false;
     showMessage("");
   });
 
@@ -774,7 +901,9 @@
     $("cards").replaceChildren();
     $("connectionBadge").textContent = "Disconnected";
     $("consolePanel").hidden = true;
-    $("connectionPanel").hidden = false;
+    $("connectionPanel").hidden = true;
+    $("landing").hidden = false;
+    $("waitlist").hidden = false;
 
     showMessage("Disconnected. In-memory credentials cleared.");
   });
