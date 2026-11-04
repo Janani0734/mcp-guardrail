@@ -190,7 +190,7 @@ async function expireRequestIfNeeded(request) {
   }
 
   const updated = await queryDatabase(
-    `/approval_requests?id=eq.${request.id}&status=eq.PENDING`,
+    `/approval_requests?id=eq.${encodeURIComponent(request.id)}&status=eq.PENDING`,
     "PATCH",
     { status: "EXPIRED" }
   );
@@ -354,8 +354,11 @@ function createMcpServer() {
       }
     },
     async ({ task_id }) => {
+      // Encode once so the value cannot inject extra query filters.
+      const safeTaskId = encodeURIComponent(task_id);
+
       const taskRecords = await queryDatabase(
-        `/sandbox_tasks?id=eq.${task_id}&select=*`,
+        `/sandbox_tasks?id=eq.${safeTaskId}&select=*`,
         "GET"
       );
 
@@ -369,7 +372,7 @@ function createMcpServer() {
       const task = taskRecords[0];
 
       const activeRequests = await queryDatabase(
-        `/approval_requests?target=eq.${task_id}&status=eq.PENDING&select=*`,
+        `/approval_requests?target=eq.${safeTaskId}&status=eq.PENDING&select=*`,
         "GET"
       );
 
@@ -642,6 +645,42 @@ app.post(
         transaction.status === "COMMITTED" ||
         transaction.status === "REJECTED",
       transaction: responseTransaction
+    });
+  })
+);
+
+// NEW: admin-only route to create a sandbox task.
+// Usage: POST /api/tasks  { "id": "demo-task-3", "title": "Temporary test task" }
+app.post(
+  "/api/tasks",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const parsed = z
+      .object({
+        id: z
+          .string()
+          .min(1)
+          .max(100)
+          .regex(/^[A-Za-z0-9_-]+$/),
+        title: z.string().min(1).max(200)
+      })
+      .strict()
+      .safeParse(req.body);
+
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: "Invalid task."
+      });
+    }
+
+    const created = await queryDatabase(
+      "/sandbox_tasks",
+      "POST",
+      { ...parsed.data, completed: false }
+    );
+
+    res.status(201).json({
+      task: Array.isArray(created) ? created[0] : created
     });
   })
 );
