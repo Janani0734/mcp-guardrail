@@ -1,0 +1,39 @@
+name: e2e-dashboard
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  playwright:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Wake the backend (Render free tier sleeps)
+        run: curl --retry 5 --retry-delay 15 --max-time 120 -fsS https://mcp-guardrail-backend.onrender.com/healthz
+
+      # Traces are switched off on purpose: a trace of a failed run would
+      # record the admin key typed into the form. Do not upload reports.
+      - name: Run dashboard tests
+        env:
+          RENDER_ADMIN_API_KEY: ${{ secrets.RENDER_ADMIN_API_KEY }}
+        run: npx playwright test tests/e2e/dashboard.spec.js --trace=off
