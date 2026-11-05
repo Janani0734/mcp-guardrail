@@ -24,6 +24,17 @@ const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
 const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
 const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
 
+// Tasks that must never be deletable, even if a client ignores the title.
+// Comma-separated list in Render env var PROTECTED_TASK_IDS.
+// Defaults to demo-task-2. A boolean "protected" column on
+// sandbox_tasks is also honoured if you add one (see SQL note).
+const PROTECTED_TASK_IDS = new Set(
+  (process.env.PROTECTED_TASK_IDS || "demo-task-2")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean)
+);
+
 if (!ADMIN_API_KEY || ADMIN_API_KEY.length < 32) {
   throw new Error(
     "Set ADMIN_API_KEY to a random secret of at least 32 characters."
@@ -139,12 +150,22 @@ function queryDatabase(endpointPath, httpMethod, dataBody = null) {
 
           databaseResponse.on("end", () => {
             if (databaseResponse.statusCode >= 400) {
-              reject(
-                new Error(
-                  `Database request failed: ` +
-                  `${databaseResponse.statusCode} - ${responseText}`
-                )
+              const failure = new Error(
+                `Database request failed: ` +
+                `${databaseResponse.statusCode} - ${responseText}`
               );
+
+              // Keep the database's own error details so routes can
+              // turn expected failures into proper 4xx responses.
+              failure.statusCode = databaseResponse.statusCode;
+
+              try {
+                failure.db = JSON.parse(responseText);
+              } catch {
+                failure.db = { message: responseText };
+              }
+
+              reject(failure);
               return;
             }
 
@@ -354,11 +375,10 @@ function createMcpServer() {
       }
     },
     async ({ task_id }) => {
-      // Encode once so the value cannot inject extra query filters.
-      const safeTaskId = encodeURIComponent(task_id);
+      const encodedTaskId = encodeURIComponent(task_id);
 
       const taskRecords = await queryDatabase(
-        `/sandbox_tasks?id=eq.${safeTaskId}&select=*`,
+        `/sandbox_tasks?id=eq.${encodedTaskId}&select=*`,
         "GET"
       );
 
@@ -371,8 +391,19 @@ function createMcpServer() {
 
       const task = taskRecords[0];
 
+      // Server-side protection: enforced here, not left to the AI client.
+      if (PROTECTED_TASK_IDS.has(task_id) || task.protected === true) {
+        return textResult(
+          {
+            error: "Task is protected and cannot be deleted.",
+            target: task_id
+          },
+          true
+        );
+      }
+
       const activeRequests = await queryDatabase(
-        `/approval_requests?target=eq.${safeTaskId}&status=eq.PENDING&select=*`,
+        `/approval_requests?target=eq.${encodedTaskId}&status=eq.PENDING&select=*`,
         "GET"
       );
 
@@ -442,7 +473,7 @@ function createMcpServer() {
     },
     async ({ request_id }) => {
       const matchedRequests = await queryDatabase(
-        `/approval_requests?id=eq.${request_id}&select=*`,
+        `/approval_requests?id=eq.${encodeURIComponent(request_id)}&select=*`,
         "GET"
       );
 
@@ -492,6 +523,8 @@ app.post("/mcp", async (req, res) => {
     await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
   } catch (error) {
+    console.error("MCP request failed:", error.message);
+
     if (!res.headersSent) {
       res.status(500).json({
         jsonrpc: "2.0",
@@ -585,21 +618,50 @@ app.post(
 
     const { txId, action } = parsed.data;
 
-    const rpcResult = await queryDatabase(
-      "/rpc/guardrail_finalize_request",
-      "POST",
-      {
-        p_request_id: txId,
-        p_action: action
+    let rpcResult;
+
+    try {
+      rpcResult = await queryDatabase(
+        "/rpc/guardrail_finalize_request",
+        "POST",
+        {
+          p_request_id: txId,
+          p_action: action
+        }
+      );
+    } catch (error) {
+      // P0001 is an intentional RAISE EXCEPTION inside the SQL function,
+      // so it is an expected business error, not a server failure.
+      if (error.statusCode < 500 && error.db?.code === "P0001") {
+        const detail = String(error.db.message || "");
+
+        if (/not found/i.test(detail)) {
+          return res.status(404).json({
+            error: "Request not found."
+          });
+        }
+
+        return res.status(409).json({
+          error: "Request cannot be finalized.",
+          detail: detail.slice(0, 200)
+        });
       }
-    );
+
+      // Anything else is a real problem and stays a 500.
+      throw error;
+    }
 
     const transaction = Array.isArray(rpcResult)
       ? rpcResult[0]
       : rpcResult;
 
+    if (!transaction) {
+      return res.status(404).json({
+        error: "Request not found."
+      });
+    }
+
     if (
-      !transaction ||
       transaction.id !== txId ||
       typeof transaction.status !== "string"
     ) {
@@ -649,8 +711,6 @@ app.post(
   })
 );
 
-// NEW: admin-only route to create a sandbox task.
-// Usage: POST /api/tasks  { "id": "demo-task-3", "title": "Temporary test task" }
 app.post(
   "/api/tasks",
   requireAdmin,
