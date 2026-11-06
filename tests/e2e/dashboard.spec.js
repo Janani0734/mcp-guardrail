@@ -17,13 +17,14 @@ test.describe("MCP-Guardrail dashboard", () => {
     // .first() avoids a strict-mode failure when several headings
     // contain "MCP-Guardrail" (title, section headings, and so on).
     await expect(
-      page.getByRole("heading", { name: /MCP-Guardrail/i }).first()
+    page.getByRole("heading", { level: 1, name: /agent asks first/i })
     ).toBeVisible();
 
     await expect(
-      page.getByRole("button", { name: "Open Sandbox Test Console" })
+    page.getByRole("link", { name: "Open the sandbox console" })
     ).toBeVisible();
   });
+  
 
   test("connects and verifies audit chain", async ({ page, request }) => {
     test.skip(
@@ -41,7 +42,7 @@ test.describe("MCP-Guardrail dashboard", () => {
     });
     expect(health.ok()).toBeTruthy();
 
-    await page.goto(DASHBOARD_URL);
+    await page.goto("https://janani0734.github.io/mcp-guardrail/console.html");
 
     await page
       .getByRole("button", { name: "Open Sandbox Test Console" })
