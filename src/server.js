@@ -197,6 +197,51 @@ function queryDatabase(endpointPath, httpMethod, dataBody = null) {
   });
 }
 
+const DEFAULT_EXPIRY_SECONDS = 300;
+
+// Turns a simple pattern such as "temp-*" into an anchored RegExp.
+function globToRegExp(pattern) {
+  const escaped = pattern
+    .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*/g, ".*");
+
+  return new RegExp(`^${escaped}$`);
+}
+
+// First matching rule wins (lowest priority number first).
+// No matching rule means the safe default: a human must approve.
+async function evaluatePolicy(toolName, target) {
+  const rules = await queryDatabase(
+    "/policies?select=*&order=priority.asc,created_at.asc",
+    "GET"
+  );
+
+  if (!Array.isArray(rules)) {
+    throw new Error("Unexpected policies response.");
+  }
+
+  for (const rule of rules) {
+    if (
+      rule.tool_name === toolName &&
+      globToRegExp(rule.target_pattern).test(target)
+    ) {
+      return {
+        action: rule.action,
+        expirySeconds: rule.expiry_seconds || DEFAULT_EXPIRY_SECONDS,
+        reason: rule.reason || null,
+        ruleId: rule.id
+      };
+    }
+  }
+
+  return {
+    action: "REQUIRE_APPROVAL",
+    expirySeconds: DEFAULT_EXPIRY_SECONDS,
+    reason: null,
+    ruleId: null
+  };
+}
+
 async function expireRequestIfNeeded(request) {
   const deadline = Date.parse(request.expires_at);
 
@@ -402,6 +447,34 @@ function createMcpServer() {
         );
       }
 
+      // Policy engine. If the policy check itself fails, fail closed:
+      // no request is staged.
+      let decision;
+
+      try {
+        decision = await evaluatePolicy("request_delete_task", task_id);
+      } catch (error) {
+        console.error("Policy check failed:", error.message);
+
+        return textResult(
+          {
+            error: "Policy check unavailable. Request was not staged."
+          },
+          true
+        );
+      }
+
+      if (decision.action === "DENY") {
+        return textResult(
+          {
+            error: "Blocked by policy.",
+            target: task_id,
+            reason: decision.reason
+          },
+          true
+        );
+      }
+
       const activeRequests = await queryDatabase(
         `/approval_requests?target=eq.${encodedTaskId}&status=eq.PENDING&select=*`,
         "GET"
@@ -431,7 +504,9 @@ function createMcpServer() {
         requester: "demo-mcp-client",
         status: "PENDING",
         created_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 300000).toISOString()
+        expires_at: new Date(
+          Date.now() + decision.expirySeconds * 1000
+        ).toISOString()
       };
 
       await queryDatabase(
@@ -733,15 +808,107 @@ app.post(
       });
     }
 
-    const created = await queryDatabase(
-      "/sandbox_tasks",
-      "POST",
-      { ...parsed.data, completed: false }
-    );
+    let created;
+
+    try {
+      created = await queryDatabase(
+        "/sandbox_tasks",
+        "POST",
+        { ...parsed.data, completed: false }
+      );
+    } catch (error) {
+      // 23505 = unique violation: a task with this id already exists.
+      if (error.db?.code === "23505") {
+        return res.status(409).json({
+          error: "Task already exists."
+        });
+      }
+
+      throw error;
+    }
 
     res.status(201).json({
       task: Array.isArray(created) ? created[0] : created
     });
+  })
+);
+
+app.get(
+  "/api/policies",
+  requireAdmin,
+  asyncRoute(async (_req, res) => {
+    const rules = await queryDatabase(
+      "/policies?select=*&order=priority.asc,created_at.asc",
+      "GET"
+    );
+
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ policies: Array.isArray(rules) ? rules : [] });
+  })
+);
+
+app.post(
+  "/api/policies",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const parsed = z
+      .object({
+        tool_name: z.enum(["request_delete_task"]),
+        target_pattern: z
+          .string()
+          .min(1)
+          .max(100)
+          .regex(/^[A-Za-z0-9_*-]+$/),
+        action: z.enum(["DENY", "REQUIRE_APPROVAL"]),
+        priority: z.number().int().min(0).max(1000).default(100),
+        expiry_seconds: z.number().int().min(30).max(86400).optional(),
+        reason: z.string().max(200).optional()
+      })
+      .strict()
+      .safeParse(req.body);
+
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: "Invalid policy."
+      });
+    }
+
+    const created = await queryDatabase(
+      "/policies",
+      "POST",
+      parsed.data
+    );
+
+    res.status(201).json({
+      policy: Array.isArray(created) ? created[0] : created
+    });
+  })
+);
+
+app.delete(
+  "/api/policies/:id",
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const parsed = z.string().uuid().safeParse(req.params.id);
+
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: "Invalid policy id."
+      });
+    }
+
+    const removed = await queryDatabase(
+      `/policies?id=eq.${encodeURIComponent(parsed.data)}`,
+      "DELETE"
+    );
+
+    if (!Array.isArray(removed) || removed.length === 0) {
+      return res.status(404).json({
+        error: "Policy not found."
+      });
+    }
+
+    res.json({ deleted: removed[0].id });
   })
 );
 
