@@ -19,5 +19,10 @@ alter table public.policies enable row level security;
 -- Example rule: demo-task-2 can never be deleted.
 insert into public.policies
   (tool_name, target_pattern, action, priority, reason)
-values
-  ('request_delete_task', 'demo-task-2', 'DENY', 10, 'Protected demo record');
+select 'request_delete_task', 'demo-task-2', 'DENY', 10, 'Protected demo record'
+where not exists (
+  select 1 from public.policies
+  where tool_name = 'request_delete_task'
+    and target_pattern = 'demo-task-2'
+    and action = 'DENY'
+);
