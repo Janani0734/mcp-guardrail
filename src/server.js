@@ -8,6 +8,8 @@ import {
   S3Client,
   PutObjectCommand
 } from "@aws-sdk/client-s3";
+import { mountProxy } from "./proxy/gateway.js";
+import { mountDemoUpstream } from "./proxy/demo-upstream.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 10000);
