@@ -4,65 +4,93 @@
 
 **Approve AI agent actions before they execute.**
 
-MCP-Guardrail is a human-in-the-loop safety layer for AI agents using the
-Model Context Protocol (MCP). Instead of allowing an AI agent to perform a
-risky action immediately, MCP-Guardrail converts the request into an
-expiring approval request. A human reviews it in a dashboard and approves
-or rejects it.
+MCP-Guardrail is a human-in-the-loop safety and governance layer for AI agents
+using the Model Context Protocol (MCP). It can run as a gateway in front of an
+upstream MCP server: risky tool calls are inspected, policy rules are applied,
+and high-risk actions are held as expiring approval requests until a human
+approves or rejects them.
 
 ## Live demo
 
-- Frontend dashboard:  
-  https://janani0734.github.io/mcp-guardrail/
+- Product landing page:  
+  [https://janani0734.github.io/mcp-guardrail/](https://janani0734.github.io/mcp-guardrail/)
+
+- Admin sandbox console:  
+  Open the console from the landing page and sign in with `ADMIN_API_KEY`.
 
 - Backend health check:  
-  https://mcp-guardrail-backend.onrender.com/healthz
+  [https://mcp-guardrail-backend.onrender.com/healthz](https://mcp-guardrail-backend.onrender.com/healthz)
 
-The backend runs on a free hosting tier and sleeps when idle. The first
-request after a pause can take 20 to 60 seconds.
+The backend runs on a free hosting tier and sleeps when idle. The first request
+after a pause can take 20 to 60 seconds.
 
-## What it does
+## How it works
 
 ```text
 Claude / MCP client
         |
-        | request_delete_task
+        | tool call
         v
-MCP-Guardrail backend
+MCP-Guardrail gateway or built-in MCP server
         |
-        | Policy engine: DENY, or create PENDING approval request
+        | Policy engine: DENY, REQUIRE_APPROVAL, or forward
         v
 Supabase PostgreSQL
         |
-        | Admin dashboard displays request
+        | Admin dashboard displays pending request
         v
 Human approves or rejects
         |
         | Atomic database RPC
         v
-Task deleted OR preserved
+Action forwarded / blocked / preserved
 ```
 
-## Verified MVP results
+## Two modes
 
-The complete approval loop has been tested end-to-end with Claude,
-Supabase, Render, and the MCP-Guardrail dashboard.
+### Built-in sandbox tools
+
+The built-in MCP server exposes `list_tasks`, `request_delete_task`, and
+`get_request_status`. Deletion requests are policy-checked and held for human
+approval before execution.
+
+### Gateway proxy mode
+
+MCP-Guardrail can also run as a gateway in front of a third-party MCP server.
+Clients connect to the Guardrail gateway endpoint instead of the upstream
+server. The gateway inspects `tools/call` requests, applies policy rules, and
+either forwards, denies, or holds the call for human approval.
+
+```text
+Claude → MCP-Guardrail Gateway → Upstream MCP server
+```
+
+Gateway requests are stored with their original payload and upstream server
+reference. When an administrator approves the request, the gateway forwards the
+original tool call to the upstream server and records the forwarding outcome in
+the audit chain.
+
+## Manually verified MVP results
+
+The complete approval loop has been manually tested end-to-end with Claude,
+Supabase, Render, and the MCP-Guardrail dashboard. The dashboard itself is
+covered by automated Playwright end-to-end tests in GitHub Actions.
 
 | Test | Result |
 |---|---|
 | AI requests deletion | Approval request created as `PENDING` |
 | Human approves deletion | Target task deleted; request became `COMMITTED` |
-| Human rejects deletion (admin `ABORT`) | Target task preserved; request became `REJECTED` |
+| Human rejects deletion (admin `ABORT`) | Target task preserved; request became `REJECTED`; decision recorded in the audit chain |
 | Approval expires | No deletion executed; request became `EXPIRED` |
-| Audit chain verification | `verified: true` |
+| Audit chain verification | `verified: true`; 15-event chain verified with no broken links |
 | External R2 anchoring | `anchored: true` |
 | AI requests deletion of a protected task | Server refused it; no approval request was created |
 | Policy rule with custom expiry | Approval window was exactly 10 minutes instead of the 5-minute default |
-| Admin rejects a request (`ABORT`) | Task preserved; request became `REJECTED`; decision recorded in audit chain |
 
 ## Features
 
 - MCP tool integration over Streamable HTTP
+- Gateway proxy mode for upstream MCP servers
 - Expiring approval requests
 - Human approval dashboard
 - Approve and reject controls
@@ -86,8 +114,28 @@ Claude Desktop connects to the backend as a custom connector:
 2. Choose **Add custom connector**.
 3. Use the URL `https://mcp-guardrail-backend.onrender.com/mcp`.
 
-Available MCP tools: `list_tasks`, `request_delete_task`,
+Available built-in MCP tools: `list_tasks`, `request_delete_task`,
 `get_request_status`.
+
+## Gateway mode
+
+To route Claude through the gateway, register an upstream MCP server and use
+the gateway endpoint:
+
+```text
+[https://mcp-guardrail-backend.onrender.com/gateway/](https://mcp-guardrail-backend.onrender.com/gateway/)<upstream-server-id>/mcp
+```
+
+The gateway evaluates each `tools/call` request against the policy rules:
+
+| Policy outcome | Behaviour |
+|---|---|
+| `DENY` | Request is blocked before reaching the upstream server |
+| `REQUIRE_APPROVAL` | Request is held as a `PENDING` approval request |
+| No matching rule | Request is held for approval with the default window |
+
+Non-tool-call MCP traffic, such as `initialize` and `tools/list`, is forwarded
+to the upstream server.
 
 ## Policy engine
 
@@ -95,9 +143,11 @@ Rules decide what happens when an AI agent calls a high-risk tool. They are
 stored in the `policies` table (see `db/policies.sql`) and managed through
 the admin API.
 
-- **Matching:** a rule matches on tool name and a target pattern. Wildcards
-  work, so `temp-*` matches `temp-1`. Rules are checked by priority (lowest
-  number first), and the first match wins.
+- **Matching:** a rule matches on tool name and a target pattern. Patterns use
+  glob-style wildcards, so `temp-*` matches `temp-1`. Regular expressions are
+  not accepted, avoiding ReDoS risk and ambiguous matching.
+- **Priority:** rules are checked in ascending `priority` order, and the first
+  match wins. Equal priorities are broken by creation time.
 - **Actions:** `DENY` blocks the request before any approval request is
   created. `REQUIRE_APPROVAL` stages the request for a human.
 - **Default:** with no matching rule, a human must approve, with a
@@ -151,6 +201,9 @@ If an existing audit event is edited, deleted, reordered, or its payload
 is changed, the stored hash no longer matches the recomputed hash. The
 verification function detects the broken chain.
 
+Audit appends are serialized through the database so concurrent events cannot
+fork the chain.
+
 ## External anchoring
 
 The backend exports the latest audit-chain hash to Cloudflare R2 as an
@@ -172,6 +225,20 @@ Example checkpoint:
 The R2 bucket uses a retention lock on the `anchors/` prefix. This helps
 prevent checkpoint deletion or overwrite for the configured retention
 period.
+
+### Anchor verification
+
+`GET /api/audit` verifies both the internal hash chain and the external
+anchor:
+
+- `verified` — the internal hash chain is intact.
+- `anchored` — at least one external checkpoint exists.
+- `anchorsMatchChain` — the latest anchor matches the chain at its recorded
+  event count.
+- `unanchoredEvents` — events created after the latest anchor.
+
+Events created after the latest anchor are still protected by the internal
+hash chain, but they are not yet externally anchored.
 
 ### Security model
 
@@ -280,10 +347,16 @@ skipped without it.
 GET /healthz
 ```
 
-### MCP endpoint
+### Built-in MCP endpoint
 
 ```http
 POST /mcp
+```
+
+### Gateway endpoint
+
+```http
+POST /gateway/:upstreamServerId/mcp
 ```
 
 ### Admin approval ledger
@@ -353,15 +426,32 @@ GET /api/audit/anchor/latest
 Authorization: Bearer <ADMIN_API_KEY>
 ```
 
+## Limitations
+
+- MCP-Guardrail is a reference implementation of the human-in-the-loop
+  approval pattern. The gateway mode forwards requests to registered upstream
+  servers, but it does not yet provide a full multi-tenant proxy platform.
+- The `/mcp` and gateway endpoints currently have no end-user authentication.
+  Rate limiting and pending-request limits reduce abuse, but per-workspace
+  API keys are planned before real production use.
+- A single shared administrator key means audit events identify the
+  administrator role, not an individual human. Multi-user identity is planned
+  for the Team tier.
+- The dashboard stores the administrator key in browser storage. This is
+  acceptable for the developer preview, but a session-based authentication flow
+  is planned.
+- Audit anchoring provides point-in-time external checkpoints. Events created
+  after the latest anchor are protected by the internal hash chain but are not
+  yet externally anchored.
+- This is an early developer preview, not a certified enterprise security
+  product.
+
 ## Security notes
 
 - Do not commit `.env`, API keys, database keys, or administrator secrets.
 - Use disposable sandbox data for public demos.
 - Do not connect production databases, payment systems, cloud credentials,
   or customer data without an additional security review.
-- The `/mcp` endpoint has no login yet. It can only stage requests, and
-  nothing executes without human approval, but per-workspace keys are
-  planned before any real use.
 - This is an early developer preview, not a certified enterprise security
   product.
 
@@ -374,6 +464,7 @@ Authorization: Bearer <ADMIN_API_KEY>
 - [ ] OpenTimestamps blockchain anchoring
 - [ ] Exportable compliance reports
 - [ ] SDK for custom MCP servers
+- [ ] LLM evaluation suite for prompt-injection and unsafe-action scenarios
 
 ## License
 
