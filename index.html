@@ -1,960 +1,326 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MCP-Guardrail | Approve AI agent actions before they execute</title>
-  <meta
-    name="description"
-    content="MCP-Guardrail turns risky AI tool calls into expiring, human-approved requests."
-  >
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCP-Guardrail: your AI agent asks first, a person decides</title>
+<meta name="description" content="MCP-Guardrail holds risky AI agent actions as expiring approval requests, lets a person approve or reject them, and keeps a tamper-evident record of every decision.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9B%A1%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Source+Serif+4:opsz,wght@8..60,400..600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F1F4F2; --ink:#15201F; --muted:#4D5E5B; --line:#CBD5D1; --paper:#FFFFFF;
+  --teal:#0E5A57; --teal-ink:#FFFFFF; --amber:#B86E00; --red:#B3382C;
+  --display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --body:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+  color-scheme:light dark;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#0F1615;--ink:#E6EEEC;--muted:#9FB1AD;--line:#2A3835;--paper:#16201F;
+        --teal:#5FC2BA;--teal-ink:#0B1413;--amber:#E5A33B;--red:#E5736A}
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 1.125rem/1.65 var(--body)}
+a{color:inherit}
+:focus-visible{outline:3px solid var(--teal);outline-offset:3px;border-radius:2px}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+h1,h2,h3{font-family:var(--display);line-height:1.1;margin:0;letter-spacing:-.02em}
+p{margin:0}
 
-  <style>
-    :root {
-      color-scheme: dark;
-      --bg: #090e1b;
-      --surface: #141d30;
-      --border: #33415c;
-      --text: #edf2ff;
-      --muted: #b3bed4;
-      --primary: #b7a9ff;
-      --danger: #ffb3bf;
-      --success: #79e5c5;
-      --warning: #ffd477;
-    }
+.top{display:flex;justify-content:space-between;align-items:center;padding:22px 0}
+.brand{font:700 1.1rem var(--display);text-decoration:none;letter-spacing:-.01em}
+.top nav{display:flex;gap:22px;font-size:1rem}
+.top nav a{text-decoration:none;border-bottom:1px solid var(--line)}
+.top nav a:hover{border-color:var(--ink)}
 
-    * {
-      box-sizing: border-box;
-    }
+.hero{display:grid;grid-template-columns:1.1fr .9fr;gap:56px;align-items:center;padding:56px 0 88px}
+.hero h1{font-size:clamp(2.4rem,5.6vw,4.2rem);font-weight:800}
+.lede{margin-top:22px;max-width:34em;color:var(--muted)}
 
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--text);
-      font-family: system-ui, sans-serif;
-      line-height: 1.6;
-    }
+.waitlist{margin-top:30px;max-width:30rem}
+.waitlist label{display:block;font:600 .95rem var(--display);margin-bottom:6px}
+.stack{display:grid;gap:12px}
+.waitlist .opt{font-weight:400;color:var(--muted)}
+.waitlist input.field{width:100%;padding:13px 14px;font:inherit;font-size:1rem;color:var(--ink);
+  background:var(--paper);border:1.5px solid var(--line);border-radius:6px}
+.waitlist input.field:focus{border-color:var(--teal)}
+.waitlist button{justify-self:start;padding:13px 22px;font:700 1rem var(--display);color:var(--teal-ink);background:var(--teal);
+  border:0;border-radius:6px;cursor:pointer;white-space:nowrap}
+.waitlist button:hover{filter:brightness(1.1)}
+.waitlist button:disabled{opacity:.6;cursor:wait}
+.waitlist .hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+.status{min-height:1.6em;margin-top:10px;font-size:1rem;color:var(--muted)}
+.status[data-state=ok]{color:var(--teal);font-weight:600}
+.status[data-state=error]{color:var(--red);font-weight:600}
 
-    [hidden] {
-      display: none !important;
-    }
+.ticket{background:var(--paper);border:1.5px solid var(--ink);border-radius:4px;padding:22px 22px 20px;
+  box-shadow:6px 6px 0 var(--line)}
+.ticket-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}
+.chip{display:inline-block;padding:4px 10px;border-radius:3px;font:700 .85rem var(--display);
+  color:#fff;background:var(--amber);transition:background .3s}
+.chip[data-state=rejected]{background:var(--red)}
+.window{font-size:.95rem;color:var(--muted)}
+.ticket dl{margin:0;display:grid;gap:10px}
+.ticket dt{font-size:.85rem;color:var(--muted)}
+.ticket dd{margin:0;font:500 .92rem var(--mono);overflow-wrap:anywhere}
+.outcome{margin-top:18px;padding-top:14px;border-top:1px dashed var(--line);font-size:1rem}
+.caption{margin-top:14px;font-size:.9rem;color:var(--muted)}
 
-    main {
-      max-width: 1050px;
-      margin: auto;
-      padding: 28px 18px 70px;
-    }
+section{padding:72px 0;border-top:1px solid var(--line)}
+section>.wrap>h2{font-size:clamp(1.7rem,3.4vw,2.4rem);font-weight:700;max-width:20em}
+.intro{margin-top:14px;max-width:36em;color:var(--muted)}
 
-    header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 16px;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 22px;
-      margin-bottom: 24px;
-    }
+.steps{list-style:none;margin:40px 0 0;padding:0;display:grid;gap:0;counter-reset:s}
+.steps li{counter-increment:s;display:grid;grid-template-columns:56px 1fr;gap:12px;padding:22px 0;border-bottom:1px solid var(--line)}
+.steps li:last-child{border-bottom:0}
+.steps li::before{content:counter(s);font:700 2rem/1 var(--display);color:var(--teal)}
+.steps h3{font-size:1.25rem;font-weight:700}
+.steps p{margin-top:6px;color:var(--muted);max-width:40em}
 
-    h1 {
-      margin: 0;
-      font-size: clamp(23px, 5vw, 32px);
-    }
+.facts{margin:36px 0 0;display:grid;grid-template-columns:1fr 1fr;gap:0 56px}
+.facts div{padding:18px 0;border-top:1px solid var(--line)}
+.facts dt{font:700 1.1rem var(--display)}
+.facts dd{margin:6px 0 0;color:var(--muted)}
 
-    h2 {
-      margin-top: 0;
-      font-size: clamp(24px, 5vw, 36px);
-      line-height: 1.25;
-    }
+.plans{margin:36px 0 0;border-top:1.5px solid var(--ink)}
+.plan{display:grid;grid-template-columns:200px 1fr auto;gap:8px 28px;align-items:baseline;padding:20px 0;border-bottom:1px solid var(--line)}
+.plan h3{font-size:1.25rem;font-weight:700}
+.plan p{color:var(--muted)}
+.tag{font:600 .9rem var(--display);color:var(--teal)}
+.tag.later{color:var(--muted)}
 
-    h3 {
-      margin-top: 0;
-      font-size: 22px;
-    }
+.end{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:start}
+.links{margin:0;padding:0;list-style:none;display:grid;gap:12px}
+.links a{font-weight:600}
 
-    p {
-      margin: 10px 0;
-    }
+footer{padding:36px 0 56px;border-top:1px solid var(--line);color:var(--muted);font-size:.95rem}
+footer p+p{margin-top:6px}
 
-    .muted {
-      color: var(--muted);
-    }
-
-    .badge {
-      background: #24213e;
-      color: #ddd5ff;
-      padding: 7px 12px;
-      border-radius: 30px;
-      font-size: 14px;
-    }
-
-    .panel,
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 26px;
-      margin-bottom: 20px;
-    }
-
-    .hero {
-      padding: 40px 26px;
-    }
-
-    .hero-grid {
-      display: grid;
-      grid-template-columns: 1.2fr 0.8fr;
-      gap: 28px;
-      align-items: start;
-    }
-
-    .subheading {
-      color: var(--primary);
-      font-weight: 650;
-      margin-top: 16px;
-    }
-
-    .notice {
-      border-left: 4px solid var(--warning);
-      background: #292516;
-      padding: 12px 16px;
-      border-radius: 8px;
-      color: #ffe6ae;
-      margin: 18px 0;
-    }
-
-    label {
-      display: block;
-      margin-top: 18px;
-      font-weight: 600;
-    }
-
-    input,
-    button {
-      font: inherit;
-      border-radius: 9px;
-    }
-
-    input {
-      display: block;
-      width: 100%;
-      margin-top: 7px;
-      padding: 12px;
-      color: var(--text);
-      background: var(--bg);
-      border: 1px solid #71809b;
-    }
-
-    button {
-      border: 0;
-      padding: 12px 18px;
-      cursor: pointer;
-      background: var(--primary);
-      color: #171126;
-      font-weight: 650;
-    }
-
-    button.secondary {
-      color: var(--text);
-      background: #2b3852;
-    }
-
-    button.reject {
-      background: var(--danger);
-      color: #39101b;
-    }
-
-    button:disabled {
-      opacity: .5;
-      cursor: not-allowed;
-    }
-
-    button:focus-visible,
-    input:focus-visible {
-      outline: 3px solid var(--warning);
-      outline-offset: 3px;
-    }
-
-    .actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      margin-top: 20px;
-    }
-
-    .card {
-      border-left: 5px solid var(--warning);
-    }
-
-    .card[data-status="COMMITTED"] {
-      border-left-color: var(--success);
-    }
-
-    .card[data-status="REJECTED"],
-    .card[data-status="FAILED"] {
-      border-left-color: var(--danger);
-    }
-
-    .card[data-status="EXPIRED"] {
-      border-left-color: #a4aec2;
-    }
-
-    .request-id {
-      overflow-wrap: anywhere;
-      font-family: monospace;
-      color: var(--muted);
-    }
-
-    pre {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      padding: 16px;
-      border-radius: 8px;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-      font-size: 13px;
-    }
-
-    .clock {
-      color: var(--warning);
-    }
-
-    #message {
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-      color: var(--warning);
-      min-height: 24px;
-    }
-
-    .empty {
-      padding: 24px;
-      color: var(--muted);
-      border: 1px dashed var(--border);
-      border-radius: 10px;
-    }
-
-    .feature-list {
-      padding-left: 20px;
-      margin: 14px 0 0;
-    }
-
-    .feature-list li {
-      margin-bottom: 8px;
-    }
-
-    .audit-ok {
-      color: var(--success);
-      font-weight: 600;
-    }
-
-    .audit-fail {
-      color: var(--danger);
-      font-weight: 600;
-    }
-
-    @media (max-width: 760px) {
-      .hero-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    @media (max-width: 540px) {
-      .panel,
-      .card {
-        padding: 18px;
-      }
-
-      .actions button {
-        width: 100%;
-      }
-    }
-  </style>
+@media (max-width:820px){
+  .hero,.end{grid-template-columns:1fr;gap:40px}
+  .hero{padding:32px 0 64px}
+  .facts{grid-template-columns:1fr}
+  .plan{grid-template-columns:1fr}
+  .top nav{gap:14px}
+}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.chip{transition:none}}
+</style>
 </head>
-
 <body>
-<main>
-  <header>
-    <div>
-      <h1>🛡 MCP-Guardrail</h1>
-      <p class="muted">
-        A safety layer for dangerous AI tool calls.
-      </p>
-    </div>
-    <span class="badge" id="connectionBadge">Disconnected</span>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="#">MCP-Guardrail</a>
+    <nav aria-label="Main">
+      <a href="#how">How it works</a>
+      <a href="#plans">Plans</a>
+      <a href="https://github.com/Janani0734/mcp-guardrail">GitHub</a>
+    </nav>
   </header>
 
-  <section id="landing" class="panel hero">
-    <div class="hero-grid">
+  <main>
+    <div class="hero">
       <div>
-        <h2>
-          Approve AI agent actions before they execute.
-        </h2>
+        <h1>Your AI agent asks first. A person decides.</h1>
+        <p class="lede">MCP-Guardrail holds risky agent actions as expiring requests, lets you approve or reject them, and keeps a tamper-evident record of every decision.</p>
 
-        <p>
-          MCP-Guardrail turns risky AI tool calls into expiring,
-          human-approved requests. Your AI can request an action but a
-          person decides whether it happens.
-        </p>
-
-        <p class="subheading">
-          Your AI agent can ask. You decide.
-        </p>
-
-        <div class="actions">
-          <a href="#waitlist">
-            <button type="button">Join the waitlist</button>
-          </a>
-          <button id="openConsole" type="button" class="secondary">
-            Open Sandbox Test Console
-          </button>
-        </div>
+        <form class="waitlist" action="https://formspree.io/f/maeelzpw" method="POST" novalidate>
+          <div class="stack">
+            <div>
+              <label for="email-top">Email for the waitlist</label>
+              <input class="field" id="email-top" type="email" name="email" autocomplete="email" placeholder="you@company.com" required>
+            </div>
+            <div>
+              <label for="use-top">What would you want an agent to ask approval for? <span class="opt">(optional)</span></label>
+              <input class="field" id="use-top" type="text" name="dangerous_action" placeholder="Deleting files, sending emails, payments&hellip;">
+            </div>
+            <button type="submit">Join the waitlist</button>
+          </div>
+          <input class="hp" type="text" name="_gotcha" tabindex="-1" autocomplete="off" aria-hidden="true">
+          <p class="status" role="status" aria-live="polite"></p>
+        </form>
       </div>
 
       <div>
-        <h3>What it prevents</h3>
+        <aside class="ticket" aria-label="Example approval request">
+          <div class="ticket-head">
+            <span class="chip" id="chip" data-state="pending">Pending</span>
+            <span class="window">10-minute window</span>
+          </div>
+          <dl>
+            <div><dt>Request</dt><dd>678561b0-b46b-47e8-8b67-8da8c364e1b6</dd></div>
+            <div><dt>The agent asked to</dt><dd>delete task demo-task-3</dd></div>
+            <div><dt>Requested by</dt><dd>demo-mcp-client</dd></div>
+            <div><dt>Policy</dt><dd>Approval required, 600 s</dd></div>
+          </dl>
+          <p class="outcome" id="outcome">Waiting for a person to decide.</p>
+        </aside>
+        <p class="caption">A request from a real test run. The admin rejected it and the task stayed.</p>
+      </div>
+    </div>
 
-        <ul class="feature-list">
-          <li>Unapproved file or database deletions</li>
-          <li>Automatic emails, payments, and cloud changes</li>
-          <li>Irreversible actions from autonomous agents</li>
-          <li>Missing approval history for AI decisions</li>
+    <section id="how">
+      <div class="wrap">
+        <h2>Nothing risky runs until someone says yes</h2>
+        <ol class="steps">
+          <li>
+            <div>
+              <h3>The agent calls a risky tool</h3>
+              <p>Your agent talks to MCP-Guardrail over the Model Context Protocol, the same way it talks to any other tool server.</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h3>The policy engine checks the rules</h3>
+              <p>Rules you set can block a target outright, or hold it for approval with its own time limit. If the rules can&rsquo;t be read, nothing goes through.</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h3>A person approves or rejects</h3>
+              <p>The request waits in the dashboard and expires on its own. Every request and decision is added to a hash-chained audit log.</p>
+            </div>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <h2>What works today</h2>
+        <p class="intro">Each of these has been tested end to end against the live service.</p>
+        <dl class="facts">
+          <div><dt>Approval requests that expire</dt><dd>Pending, approved, rejected and expired states, with a five-minute default window.</dd></div>
+          <div><dt>Rules per tool and target</dt><dd>Deny a target, or require approval with a custom window, managed through an admin API.</dd></div>
+          <div><dt>Protected records</dt><dd>The server refuses to stage deletion of protected tasks, whatever the AI client decides.</dd></div>
+          <div><dt>Tamper-evident audit trail</dt><dd>Each event is hashed with the one before it, and the latest hash is checkpointed to Cloudflare R2.</dd></div>
+          <div><dt>Works with Claude</dt><dd>Connect Claude Desktop to the MCP endpoint as a custom connector.</dd></div>
+          <div><dt>Open source</dt><dd>MIT licensed, with the full code and test results on GitHub.</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <section id="plans">
+      <div class="wrap">
+        <h2>Free to try now, team features next</h2>
+        <p class="intro">Pricing isn&rsquo;t set yet. Joining the waitlist tells us what to build first.</p>
+        <div class="plans">
+          <div class="plan">
+            <h3>Developer</h3>
+            <p>The approval loop, policy rules, audit chain and dashboard, running against a sandbox.</p>
+            <span class="tag">Available now</span>
+          </div>
+          <div class="plan">
+            <h3>Team</h3>
+            <p>Approvals in Slack and Teams, sign-in for several people, separate workspaces and audit exports.</p>
+            <span class="tag later">Planned</span>
+          </div>
+          <div class="plan">
+            <h3>Enterprise</h3>
+            <p>Roles and permissions, single sign-on, and a self-hosted package for your own cloud.</p>
+            <span class="tag later">Planned</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap end">
+        <div>
+          <h2>Get notified when the Team plan opens</h2>
+          <form class="waitlist" action="https://formspree.io/f/maeelzpw" method="POST" novalidate>
+            <div class="stack">
+            <div>
+              <label for="email-bottom">Email for the waitlist</label>
+              <input class="field" id="email-bottom" type="email" name="email" autocomplete="email" placeholder="you@company.com" required>
+            </div>
+            <div>
+              <label for="use-bottom">What would you want an agent to ask approval for? <span class="opt">(optional)</span></label>
+              <input class="field" id="use-bottom" type="text" name="dangerous_action" placeholder="Deleting files, sending emails, payments&hellip;">
+            </div>
+            <button type="submit">Join the waitlist</button>
+          </div>
+          <input class="hp" type="text" name="_gotcha" tabindex="-1" autocomplete="off" aria-hidden="true">
+            <p class="status" role="status" aria-live="polite"></p>
+          </form>
+        </div>
+        <ul class="links">
+          <li><a href="index.html">Open the sandbox console</a></li>
+          <li><a href="https://github.com/Janani0734/mcp-guardrail">Read the code on GitHub</a></li>
+          <li><a href="https://mcp-guardrail-backend.onrender.com/healthz">Check the live backend</a></li>
         </ul>
-
-        <div class="notice">
-          Current release is a developer preview using disposable sandbox
-          data. It is not a certified enterprise security product.
-        </div>
       </div>
-    </div>
-  </section>
+    </section>
+  </main>
 
-  <section id="waitlist" class="panel">
-    <h2>Join the waitlist</h2>
-    <p>
-      Be first to use MCP-Guardrail for safer AI agent automation.
-    </p>
+  <footer>
+    <p>MCP-Guardrail is an early developer preview, not a certified security product.</p>
+    <p>The demo backend sleeps when idle, so the first request can take up to a minute.</p>
+  </footer>
+</div>
 
-    <form
-      id="waitlistForm"
-      action="https://formspree.io/f/maeelzpw"
-      method="POST"
-    >
-      <label for="waitlistEmail">Email address</label>
-      <input
-        id="waitlistEmail"
-        type="email"
-        name="email"
-        placeholder="you@example.com"
-        required
-      >
+<script>
+(function () {
+  "use strict";
 
-      <label for="dangerousAction">
-        What dangerous AI actions do you want to approve?
-      </label>
-      <input
-        id="dangerousAction"
-        type="text"
-        name="dangerous_action"
-        placeholder="Deleting files, sending emails, payments, cloud changes…"
-      >
+  // The one animated moment: the example request is decided once.
+  var chip = document.getElementById("chip");
+  var outcome = document.getElementById("outcome");
+  function decide() {
+    chip.textContent = "Rejected by admin";
+    chip.setAttribute("data-state", "rejected");
+    outcome.textContent = "Task kept. The decision is in the audit log.";
+  }
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    decide();
+  } else {
+    setTimeout(decide, 2600);
+  }
 
-      <div class="actions">
-        <button type="submit">Join waitlist</button>
-      </div>
-    </form>
+  // Waitlist forms post to Formspree without leaving the page.
+  document.querySelectorAll("form.waitlist").forEach(function (form) {
+    var status = form.querySelector(".status");
+    var button = form.querySelector("button");
 
-    <p id="waitlistMessage" class="muted" role="status"></p>
-  </section>
-
-  <section id="connectionPanel" class="panel" hidden>
-    <h2>Connect administrator session</h2>
-
-    <p class="muted">
-      Use your own disposable sandbox environment. The key stays in this
-      page's memory and is not saved in browser storage. Do not give
-      production administrator credentials to visitors.
-    </p>
-
-    <form id="connectForm">
-      <label for="backendUrl">Backend HTTPS base URL</label>
-      <input
-        id="backendUrl"
-        type="url"
-        value="https://mcp-guardrail-backend.onrender.com"
-        placeholder="https://your-service.onrender.com"
-        required
-      >
-
-      <label for="adminKey">Sandbox administrator API key</label>
-      <input
-        id="adminKey"
-        type="password"
-        autocomplete="off"
-        placeholder="Enter your sandbox ADMIN_API_KEY"
-        required
-      >
-
-      <div class="actions">
-        <button id="connectButton" type="submit">Connect</button>
-        <button id="backButton" type="button" class="secondary">
-          Back
-        </button>
-      </div>
-    </form>
-  </section>
-
-  <section id="consolePanel" hidden>
-    <div class="panel">
-      <h2>Pending requests and outcomes</h2>
-      <p id="syncStatus" class="muted">Not synchronized yet.</p>
-      <p id="auditStatus" class="muted">
-        Audit chain status: not checked.
-      </p>
-
-      <div class="actions">
-        <button id="refreshButton" type="button">Refresh</button>
-        <button id="disconnectButton" type="button" class="secondary">
-          Disconnect
-        </button>
-      </div>
-
-      <div class="notice">
-        No action executes automatically when approval expires. Submit
-        requests through your connected MCP client, then refresh here.
-      </div>
-
-      <p class="muted">
-        This view displays records returned by the backend. Audit-chain
-        verification recomputes hashes but is not a substitute for
-        independent external anchoring.
-      </p>
-    </div>
-
-    <div id="cards"></div>
-  </section>
-
-  <p id="message" role="status" aria-live="polite"></p>
-</main>
-
-<script type="module">
-  const $ = id => document.getElementById(id);
-
-  let apiBase = "";
-  let adminKey = "";
-  let transactions = [];
-  let serverOffset = 0;
-  let busy = false;
-  let connected = false;
-  let stateFresh = false;
-
-  function makeElement(tag, text, className) {
-    const element = document.createElement(tag);
-
-    if (text !== undefined) {
-      element.textContent = String(text);
+    function say(text, state) {
+      status.textContent = text;
+      status.setAttribute("data-state", state || "");
     }
 
-    if (className) {
-      element.className = className;
-    }
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
 
-    return element;
-  }
+      var email = form.elements.email.value.trim();
+      if (!/^\S+@\S+\.\S+$/.test(email)) {
+        say("Enter a valid email address, like you@company.com.", "error");
+        return;
+      }
 
-  function showMessage(text) {
-    $("message").textContent = text;
-  }
+      button.disabled = true;
+      say("Sending\u2026", "");
 
-  function updateControls() {
-    $("connectButton").disabled = busy;
-    $("backButton").disabled = busy;
-    $("refreshButton").disabled = busy;
-    $("disconnectButton").disabled = busy;
-  }
-
-  function setBusy(value) {
-    busy = value;
-    updateControls();
-    renderCards();
-  }
-
-  function remainingSeconds(transaction) {
-    const expiry = Date.parse(transaction.expiresAt);
-
-    if (!Number.isFinite(expiry)) {
-      return null;
-    }
-
-    return Math.max(
-      0,
-      Math.ceil((expiry - (Date.now() + serverOffset)) / 1000)
-    );
-  }
-
-  function validateTransaction(transaction) {
-    return (
-      transaction &&
-      typeof transaction.id === "string" &&
-      typeof transaction.status === "string" &&
-      typeof transaction.operation === "string"
-    );
-  }
-
-  async function requestApi(path, options = {}) {
-    const response = await fetch(apiBase + path, {
-      ...options,
-      headers: {
-        ...options.headers,
-        Authorization: `Bearer ${adminKey}`
-      },
-      cache: "no-store",
-      signal: AbortSignal.timeout(30000)
+      fetch(form.action, {
+        method: "POST",
+        headers: { Accept: "application/json" },
+        body: new FormData(form)
+      }).then(function (response) {
+        if (response.ok) {
+          form.reset();
+          say("You\u2019re on the list. We\u2019ll email you when the Team plan opens.", "ok");
+        } else {
+          say("The form couldn\u2019t save your email. Try again in a minute.", "error");
+        }
+      }).catch(function () {
+        say("No connection. Check your network and try again.", "error");
+      }).then(function () {
+        button.disabled = false;
+      });
     });
-
-    const data = await response.json().catch(() => null);
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        throw new Error(
-          "Unauthorized. Check your sandbox administrator key."
-        );
-      }
-
-      throw new Error(
-        data?.error || `Backend returned HTTP ${response.status}.`
-      );
-    }
-
-    if (!data) {
-      throw new Error("Backend did not return valid JSON.");
-    }
-
-    return data;
-  }
-
-  function renderCards() {
-    const root = $("cards");
-    root.replaceChildren();
-
-    if (!transactions.length) {
-      root.append(
-        makeElement(
-          "p",
-          "No requests returned. Ask Claude to stage a sandbox operation, then refresh.",
-          "empty"
-        )
-      );
-      return;
-    }
-
-    for (const transaction of transactions) {
-      const card = makeElement("article", undefined, "card");
-      card.dataset.status = transaction.status;
-
-      card.append(
-        makeElement("h3", transaction.operation),
-        makeElement(
-          "p",
-          `Request ID: ${transaction.id}`,
-          "request-id"
-        ),
-        makeElement(
-          "p",
-          `Backend status: ${transaction.status}`
-        )
-      );
-
-      card.append(
-        makeElement(
-          "pre",
-          JSON.stringify({
-            target: transaction.target,
-            title: transaction.targetTitle,
-            requester: transaction.requester,
-            createdAt: transaction.createdAt,
-            expiresAt: transaction.expiresAt
-          }, null, 2)
-        )
-      );
-
-      if (transaction.status === "PENDING") {
-        const clock = makeElement("p", "", "clock");
-        clock.dataset.requestId = transaction.id;
-        card.append(clock);
-
-        const actions = makeElement("div", undefined, "actions");
-
-        for (const [action, label] of [
-          ["APPROVE", "Review and Approve Deletion"],
-          ["ABORT", "Reject Request"]
-        ]) {
-          const button = makeElement(
-            "button",
-            label,
-            action === "ABORT" ? "reject" : ""
-          );
-
-          button.type = "button";
-          button.disabled = busy || !stateFresh;
-
-          button.addEventListener("click", () => {
-            void submitDecision(transaction, action);
-          });
-
-          actions.append(button);
-        }
-
-        card.append(actions);
-      }
-
-      root.append(card);
-    }
-
-    updateClocks();
-  }
-
-  function updateClocks() {
-    const byId = new Map(
-      transactions.map(transaction => [
-        transaction.id,
-        transaction
-      ])
-    );
-
-    for (const clock of $("cards").querySelectorAll(".clock")) {
-      const transaction = byId.get(clock.dataset.requestId);
-
-      if (!transaction) {
-        continue;
-      }
-
-      const seconds = remainingSeconds(transaction);
-
-      if (!stateFresh) {
-        clock.textContent =
-          "State may be stale. Refresh successfully before acting.";
-      } else if (seconds === null) {
-        clock.textContent =
-          "Invalid expiry. Approval is disabled.";
-      } else if (seconds === 0) {
-        clock.textContent =
-          "Approval window elapsed. Refresh for backend status.";
-      } else {
-        clock.textContent =
-          `Approval expires in ${seconds}s. No automatic execution.`;
-      }
-
-      const card = clock.closest("article");
-
-      for (const button of card.querySelectorAll("button")) {
-        button.disabled =
-          busy ||
-          !stateFresh ||
-          seconds === null ||
-          seconds === 0;
-      }
-    }
-  }
-
-  async function refreshTransactions() {
-    const data = await requestApi("/api/ledger");
-
-    if (
-      !Array.isArray(data.transactions) ||
-      !data.transactions.every(validateTransaction) ||
-      !Number.isFinite(Date.parse(data.serverTime))
-    ) {
-      throw new Error(
-        "Unexpected ledger response. Expected serverTime and transactions."
-      );
-    }
-
-    transactions = data.transactions;
-    serverOffset = Date.parse(data.serverTime) - Date.now();
-    stateFresh = true;
-
-    $("syncStatus").textContent =
-      `Last successful sync: ${new Date().toLocaleTimeString()}`;
-
-    renderCards();
-  }
-
-  async function refreshAuditStatus() {
-    const auditStatus = $("auditStatus");
-
-    try {
-      const auditResponse = await requestApi("/api/audit");
-      const verified = auditResponse.verified === true;
-
-      auditStatus.textContent = verified
-        ? `Audit chain verified: ${auditResponse.checkedEvents} events.`
-        : `Audit chain verification failed: ${auditResponse.message}`;
-
-      auditStatus.className = verified
-        ? "audit-ok"
-        : "audit-fail";
-    } catch (error) {
-      auditStatus.textContent =
-        `Audit chain status unavailable: ${error.message}`;
-      auditStatus.className = "audit-fail";
-    }
-  }
-
-  async function submitDecision(transaction, action) {
-    if (busy || !connected || !stateFresh) {
-      return;
-    }
-
-    const seconds = remainingSeconds(transaction);
-
-    if (seconds === null || seconds === 0) {
-      showMessage(
-        "Approval window is unavailable or elapsed. Refresh first."
-      );
-      return;
-    }
-
-    if (action === "APPROVE") {
-      const confirmed = window.confirm(
-        `Approve deletion of:\n\n` +
-        `${transaction.targetTitle || transaction.target}\n\n` +
-        `Target ID: ${transaction.target}\n` +
-        `Request ID: ${transaction.id}\n\n` +
-        `Proceed only if this is disposable sandbox data.`
-      );
-
-      if (!confirmed) {
-        return;
-      }
-    }
-
-    setBusy(true);
-    showMessage("Submitting decision. Outcome not confirmed yet.");
-
-    let outcomeMessage = "";
-
-    try {
-      const result = await requestApi("/api/override", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          txId: transaction.id,
-          action
-        })
-      });
-
-      if (
-        !validateTransaction(result.transaction) ||
-        result.transaction.id !== transaction.id
-      ) {
-        throw new Error(
-          "Unexpected response. The execution outcome needs verification."
-        );
-      }
-
-      outcomeMessage =
-        `Backend reported: ${result.transaction.status}.`;
-    } catch (error) {
-      outcomeMessage =
-        `Decision not confirmed: ${error.message}\n` +
-        "Do not blindly retry. Checking the current backend state.";
-    }
-
-    try {
-      await refreshTransactions();
-      await refreshAuditStatus();
-
-      const current = transactions.find(
-        row => row.id === transaction.id
-      );
-
-      if (current) {
-        outcomeMessage +=
-          `\nLatest synchronized status: ${current.status}.`;
-      } else {
-        outcomeMessage +=
-          "\nRequest is not in the returned ledger; verify its status through MCP.";
-      }
-    } catch (error) {
-      outcomeMessage +=
-        `\nRefresh failed: ${error.message}\n` +
-        "Actions are disabled until a successful refresh.";
-    } finally {
-      setBusy(false);
-      showMessage(outcomeMessage);
-    }
-  }
-
-  $("waitlistForm").addEventListener("submit", async event => {
-    event.preventDefault();
-
-    const form = event.target;
-    const status = $("waitlistMessage");
-
-    status.textContent = "Submitting your request…";
-
-    try {
-      const response = await fetch(form.action, {
-        method: "POST",
-        body: new FormData(form),
-        headers: {
-          Accept: "application/json"
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `Form submission failed: HTTP ${response.status}`
-        );
-      }
-
-      form.reset();
-      status.textContent =
-        "Thanks! You are on the waitlist. We will contact you when early access opens.";
-    } catch (error) {
-      status.textContent =
-        `Could not submit right now: ${error.message}`;
-    }
   });
-
-  $("openConsole").addEventListener("click", () => {
-    $("landing").hidden = true;
-    $("waitlist").hidden = true;
-    $("connectionPanel").hidden = false;
-    $("adminKey").focus();
-    showMessage("");
-  });
-
-  $("backButton").addEventListener("click", () => {
-    if (busy) return;
-
-    $("adminKey").value = "";
-    $("connectionPanel").hidden = true;
-    $("landing").hidden = false;
-    $("waitlist").hidden = false;
-    showMessage("");
-  });
-
-  $("connectForm").addEventListener("submit", async event => {
-    event.preventDefault();
-
-    if (busy) return;
-
-    try {
-      const url = new URL($("backendUrl").value.trim());
-
-      if (
-        url.protocol !== "https:" ||
-        url.username ||
-        url.password ||
-        url.search ||
-        url.hash ||
-        url.pathname !== "/"
-      ) {
-        throw new Error(
-          "Enter only the HTTPS backend base URL, without an API path."
-        );
-      }
-
-      const enteredKey = $("adminKey").value;
-
-      if (!enteredKey) {
-        throw new Error("Enter your sandbox administrator key.");
-      }
-
-      if (!window.confirm(
-        `Send the sandbox key to ${url.origin}?\n\n` +
-        "Continue only if this is your own trusted backend."
-      )) {
-        return;
-      }
-
-      apiBase = url.origin;
-      adminKey = enteredKey;
-      $("adminKey").value = "";
-
-      setBusy(true);
-      showMessage("Connecting to backend…");
-
-      await refreshTransactions();
-      await refreshAuditStatus();
-
-      connected = true;
-      $("connectionBadge").textContent = "Admin API connected";
-      $("connectionPanel").hidden = true;
-      $("consolePanel").hidden = false;
-
-      showMessage(
-        "Connected to the administrator API. " +
-        "This is not Supabase user login."
-      );
-    } catch (error) {
-      connected = false;
-      stateFresh = false;
-      adminKey = "";
-      transactions = [];
-
-      $("connectionBadge").textContent = "Disconnected";
-      $("auditStatus").textContent =
-        "Audit chain status: not checked.";
-      $("auditStatus").className = "muted";
-      renderCards();
-
-      showMessage(
-        `Connection failed: ${error.message}\n` +
-        "For 'Failed to fetch', inspect the browser Console for CORS or network errors."
-      );
-    } finally {
-      setBusy(false);
-    }
-  });
-
-  $("refreshButton").addEventListener("click", async () => {
-    if (busy || !connected) return;
-
-    setBusy(true);
-    showMessage("Refreshing backend state…");
-
-    try {
-      await refreshTransactions();
-      await refreshAuditStatus();
-      showMessage("Backend state refreshed.");
-    } catch (error) {
-      showMessage(
-        `Refresh failed: ${error.message}\n` +
-        "Actions remain disabled until synchronization succeeds."
-      );
-    } finally {
-      setBusy(false);
-    }
-  });
-
-  $("disconnectButton").addEventListener("click", () => {
-    if (busy) return;
-
-    adminKey = "";
-    apiBase = "";
-    transactions = [];
-    connected = false;
-    stateFresh = false;
-
-    $("adminKey").value = "";
-    $("cards").replaceChildren();
-    $("connectionBadge").textContent = "Disconnected";
-    $("consolePanel").hidden = true;
-    $("connectionPanel").hidden = true;
-    $("landing").hidden = false;
-    $("waitlist").hidden = false;
-    $("auditStatus").textContent =
-      "Audit chain status: not checked.";
-    $("auditStatus").className = "muted";
-
-    showMessage("Disconnected. In-memory credentials cleared.");
-  });
-
-  setInterval(updateClocks, 1000);
+})();
 </script>
 </body>
 </html>
