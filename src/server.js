@@ -974,6 +974,9 @@ app.get(
   })
 );
 
+mountDemoUpstream(app);
+mountProxy(app, { queryDatabase, requireAdmin, asyncRoute, appendAuditEvent, evaluatePolicy });
+
 app.get("/healthz", (_req, res) => {
   res.json({ status: "ok" });
 });
