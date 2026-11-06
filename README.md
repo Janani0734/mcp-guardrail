@@ -112,6 +112,35 @@ The R2 bucket uses a retention lock on the `anchors/` prefix. This helps
 prevent checkpoint deletion or overwrite for the configured retention
 period.
 
+## Policy engine
+
+Rules decide what happens when an AI agent calls a high-risk tool. They are stored in the `policies` table (see `db/policies.sql`) and managed through the admin API.
+
+- **Matching:** a rule matches on tool name and a target pattern. Wildcards work, so `temp-*` matches `temp-1`. Rules are checked by priority (lowest number first), and the first match wins.
+- **Actions:** `DENY` blocks the request before any approval request is created. `REQUIRE_APPROVAL` stages the request for a human.
+- **Default:** with no matching rule, a human must approve, with a 5-minute window.
+- **Custom expiry:** a rule can set its own approval window with `expiry_seconds` (30 to 86400).
+- **Fail closed:** if the policy table cannot be read, no request is staged.
+
+Example rule:
+
+    {
+      "tool_name": "request_delete_task",
+      "target_pattern": "demo-task-3",
+      "action": "REQUIRE_APPROVAL",
+      "priority": 20,
+      "expiry_seconds": 600,
+      "reason": "10-minute review window"
+    }
+
+Policy API (all require `Authorization: Bearer <ADMIN_API_KEY>`):
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/policies` | List rules |
+| POST | `/api/policies` | Create a rule |
+| DELETE | `/api/policies/:id` | Delete a rule |
+
 ### Security model
 
 This system is **tamper-evident**, not absolutely immutable.
@@ -251,7 +280,6 @@ Authorization: Bearer <ADMIN_API_KEY>
 - [ ] Team roles and delegated approvals
 - [ ] Slack and email approval notifications
 - [ ] Mobile push approvals
-- [ ] Approval policies by operation type
 - [ ] OpenTimestamps blockchain anchoring
 - [ ] Exportable compliance reports
 - [ ] SDK for custom MCP servers
