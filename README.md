@@ -58,6 +58,7 @@ Supabase, Render, and the MCP-Guardrail dashboard.
 | External R2 anchoring | `anchored: true` |
 | AI requests deletion of a protected task | Server refused it; no approval request was created |
 | Policy rule with custom expiry | Approval window was exactly 10 minutes instead of the 5-minute default |
+| Admin rejects a request (`ABORT`) | Task preserved; request became `REJECTED`; decision recorded in audit chain |
 
 ## Features
 
