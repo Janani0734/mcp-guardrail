@@ -279,6 +279,10 @@ async function expireRequestIfNeeded(request) {
   return latest[0];
 }
 
+// Still used when a request is first staged (REQUEST_CREATED).
+// Approve/reject decisions no longer use this: the database function
+// guardrail_finalize_request writes ADMIN_DECISION itself, in the same
+// transaction as the decision.
 async function appendAuditEvent(
   requestId,
   eventType,
@@ -696,6 +700,8 @@ app.post(
     let rpcResult;
 
     try {
+      // The database function decides the request AND writes its audit
+      // event (ADMIN_DECISION or REQUEST_EXPIRED) in one transaction.
       rpcResult = await queryDatabase(
         "/rpc/guardrail_finalize_request",
         "POST",
@@ -755,19 +761,6 @@ app.post(
       createdAt: transaction.created_at,
       expiresAt: transaction.expires_at
     };
-
-    await appendAuditEvent(
-      transaction.id,
-      "ADMIN_DECISION",
-      "dashboard-admin",
-      transaction.status,
-      {
-        requestedAction: action,
-        operation: transaction.operation,
-        target: transaction.target,
-        targetTitle: transaction.target_title
-      }
-    );
 
     if (transaction.status === "EXPIRED") {
       return res.status(410).json({
