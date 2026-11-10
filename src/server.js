@@ -10,6 +10,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { mountProxy } from "./proxy/gateway.js";
 import { mountDemoUpstream } from "./proxy/demo-upstream.js";
+import { mountWorkspaceAdmin } from "./workspaces.js";
 
 const app = express();
 const PORT = Number(process.env.PORT || 10000);
@@ -976,6 +977,7 @@ app.get(
 
 mountDemoUpstream(app);
 mountProxy(app, { queryDatabase, requireAdmin, asyncRoute, appendAuditEvent, evaluatePolicy });
+const workspaceAuth = mountWorkspaceAdmin(app, { queryDatabase, requirePlatformAdmin: requireAdmin, asyncRoute });
 
 app.get("/healthz", (_req, res) => {
   res.json({ status: "ok" });
